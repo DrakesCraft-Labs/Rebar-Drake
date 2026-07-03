@@ -194,6 +194,9 @@ interface NmsAccessor {
      */
     fun componentsEqual(itemStack: ItemStack, components: Map<DataComponentType, Any?>): Boolean
 
+    /**
+     * @see [LootTableResultBuilder.getRandomItems]
+     */
     fun getRandomItems(world: World, contextSet: NamespacedKey, lootTable: LootTable, optionalRandomLootSeed: Long?, lootContext: LootTableResultBuilder): Collection<ItemStack>
 
     companion object {
