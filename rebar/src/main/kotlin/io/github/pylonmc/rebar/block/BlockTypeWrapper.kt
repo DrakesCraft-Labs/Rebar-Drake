@@ -2,19 +2,12 @@ package io.github.pylonmc.rebar.block
 
 import io.github.pylonmc.rebar.block.context.BlockCreateContext
 import io.github.pylonmc.rebar.item.ItemTypeWrapper
-import io.github.pylonmc.rebar.item.builder.ItemStackBuilder
 import io.github.pylonmc.rebar.registry.RebarRegistry
-import io.papermc.paper.datacomponent.item.attribute.AttributeModifierDisplay.override
-import org.bukkit.Keyed
-import org.bukkit.Material
-import org.bukkit.NamespacedKey
-import org.bukkit.Registry
-import org.bukkit.Tag
+import org.bukkit.*
 import org.bukkit.block.Block
 import org.bukkit.block.data.BlockData
 import org.bukkit.entity.Player
 import org.bukkit.inventory.ItemStack
-import kotlin.collections.mutableSetOf
 
 /**
  * Allows the representation of both vanilla and Rebar blocks in a unified way.
