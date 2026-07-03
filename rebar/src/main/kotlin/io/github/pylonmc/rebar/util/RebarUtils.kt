@@ -899,6 +899,7 @@ fun VirtualInventory.unsafeAdd(slot: Int, amount: Int) {
  */
 fun VirtualInventory.unsafeSubtract(slot: Int, amount: Int) {
     val item = getUnsafeItem(slot)!!
+    check(item.amount >= amount) { "Cannot subtract $amount from item with amount ${item.amount}" }
     item.subtract(amount)
     if (item.isEmpty) unsafeItems[slot] = null
     notifyWindows(slot)
