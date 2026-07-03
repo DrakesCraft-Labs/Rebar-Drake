@@ -5,6 +5,12 @@ import io.papermc.paper.datacomponent.item.CustomModelData
 import org.bukkit.Color
 import org.bukkit.inventory.ItemStack
 
+/**
+ * A Custom Version of [CustomModelData.Builder] that allows mutating the existing
+ * [strings], [floats], [flags], and [colors] lists.
+ *
+ * The normal api is read-only and annoying to make small changes to.
+ */
 @Suppress("UnstableApiUsage")
 class CustomModelDataBuilder {
     val strings = mutableListOf<String>()

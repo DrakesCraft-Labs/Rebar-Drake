@@ -508,8 +508,6 @@ object NmsAccessorImpl : NmsAccessor {
             .withOptionalParameter(LootContextParams.BLOCK_ENTITY, lootContext.blockState?.let { (it as? CraftBlockEntityState<*>)?.blockEntity })
             .withOptionalParameter(LootContextParams.TOOL, lootContext.tool?.let { (it as CraftItemStack).handle })
             .withOptionalParameter(LootContextParams.EXPLOSION_RADIUS, lootContext.explosionRadius)
-            .withOptionalParameter(LootContextParams.ENCHANTMENT_LEVEL, lootContext.enchantmentLevel)
-            .withOptionalParameter(LootContextParams.ENCHANTMENT_ACTIVE, lootContext.enchantmentActive)
             .withOptionalParameter(LootContextParams.ADDITIONAL_COST_COMPONENT_ALLOWED, lootContext.additionalCostComponentAllowed?.let { NmsUnit.INSTANCE })
             .create(contextParamSet)
         return if (optionalRandomLootSeed != null) {
