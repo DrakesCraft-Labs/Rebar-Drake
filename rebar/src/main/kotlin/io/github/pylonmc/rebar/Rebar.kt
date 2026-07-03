@@ -205,6 +205,7 @@ object Rebar : JavaPlugin(), RebarAddon {
         SignRebarBlockHandler.register(this)
         SneakRebarBlockHandler.register(this)
         SpongeRebarBlockHandler.register(this)
+        StructureGrowRebarBlockHandler.register(this, pm)
         TargetRebarBlockHandler.register(this)
         TNTRebarBlockHandler.register(this)
         UnloadRebarBlockHandler.register(this)

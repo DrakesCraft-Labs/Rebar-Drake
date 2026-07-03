@@ -128,7 +128,7 @@ interface CargoRebarBlock : LogisticRebarBlock, EntityHolderRebarBlock {
                         .build()
                 )
                 .itemStack(
-                    ItemStackBuilder.Companion.of(Material.GRAY_CONCRETE)
+                    ItemStackBuilder.of(Material.GRAY_CONCRETE)
                     .addCustomModelDataString("pylon:cargo_duct:line"))
                 .build(fromLocation)
             addEntity("cargo:direct-connection:${face}", display)

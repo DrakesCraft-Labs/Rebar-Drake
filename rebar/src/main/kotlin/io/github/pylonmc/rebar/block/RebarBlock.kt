@@ -21,6 +21,7 @@ import io.github.pylonmc.rebar.item.builder.ItemStackBuilder
 import io.github.pylonmc.rebar.nms.NmsAccessor
 import io.github.pylonmc.rebar.registry.RebarRegistry
 import io.github.pylonmc.rebar.util.IMMEDIATE_FACES
+import io.github.pylonmc.rebar.util.editBlockData
 import io.github.pylonmc.rebar.util.isChunkLoaded
 import io.github.pylonmc.rebar.util.position.BlockPosition
 import io.github.pylonmc.rebar.util.position.position
@@ -34,11 +35,13 @@ import org.bukkit.Material
 import org.bukkit.NamespacedKey
 import org.bukkit.World
 import org.bukkit.block.Block
+import org.bukkit.block.data.BlockData
 import org.bukkit.entity.ItemDisplay
 import org.bukkit.entity.Player
 import org.bukkit.inventory.ItemStack
 import org.bukkit.persistence.PersistentDataAdapterContext
 import org.bukkit.persistence.PersistentDataContainer
+import java.util.function.Consumer
 import org.jetbrains.annotations.MustBeInvokedByOverriders
 
 /**
@@ -143,6 +146,16 @@ open class RebarBlock private constructor(val block: Block) : WailaSupplier, Key
      * before [io.github.pylonmc.rebar.event.RebarBlockLoadEvent]
      */
     open fun postInitialise() {}
+
+    @JvmOverloads
+    fun editBlockData(editor: Consumer<BlockData>, applyPhysics: Boolean = true) {
+        block.editBlockData(editor, applyPhysics)
+    }
+
+    @JvmOverloads
+    fun <D : BlockData> editBlockData(dataType: Class<D>, editor: Consumer<D>, applyPhysics: Boolean = true) {
+        block.editBlockData(dataType, editor, applyPhysics)
+    }
 
     /**
      * Used to initialize [blockTextureEntity].

@@ -33,6 +33,10 @@ import org.bukkit.*
 import org.bukkit.attribute.Attribute
 import org.bukkit.block.Block
 import org.bukkit.block.BlockFace
+import org.bukkit.block.data.BlockData
+import org.bukkit.entity.Entity
+import org.bukkit.entity.LivingEntity
+import org.bukkit.entity.Player
 import org.bukkit.entity.*
 import org.bukkit.event.Event
 import org.bukkit.inventory.EquipmentSlot
@@ -846,6 +850,77 @@ fun isSymmetrical(width: Int, height: Int, list: List<*>): Boolean {
         }
     }
     return true
+}
+
+/**
+ * Sets the raw [ItemStack] at [slot] without any checks or validation. This will not call any events called by normal methods.
+ * This will still notify any windows backed by this inventory.
+ *
+ * Note: The main reason this method exists is to improve performance over the typical [setItem] method, which calls events and clones [ItemStack]s.
+ * You should only call this event when you know you can ignore all events and handlers.
+ */
+fun VirtualInventory.unsafeSet(slot: Int, stack: ItemStack?) {
+    unsafeItems[slot] = stack
+    notifyWindows(slot)
+}
+
+/**
+ * Sets the raw [item amount][ItemStack.getAmount] at [slot] without any checks or validation. This will not call any events called by normal methods.
+ * This will still notify any windows backed by this inventory.
+ *
+ * Note: The main reason this method exists is to improve performance over the typical [setItemAmount] method, which calls events and clones [ItemStack]s.
+ * You should only call this event when you know you can ignore all events and handlers.
+ */
+fun VirtualInventory.unsafeSetAmount(slot: Int, amount: Int) {
+    val item = getUnsafeItem(slot)!!
+    item.amount = amount
+    notifyWindows(slot)
+}
+
+/**
+ * Adds to the raw [item amount][ItemStack.getAmount] at [slot] without any checks or validation. This will not call any events called by normal methods.
+ * This will still notify any windows backed by this inventory.
+ *
+ * Note: The main reason this method exists is to improve performance over the typical [addItemAmount] method, which calls events and clones [ItemStack]s.
+ * You should only call this event when you know you can ignore all events and handlers.
+ */
+fun VirtualInventory.unsafeAdd(slot: Int, amount: Int) {
+    val item = getUnsafeItem(slot)!!
+    item.add(amount)
+    notifyWindows(slot)
+}
+
+/**
+ * Subtracts from the raw [item amount][ItemStack.getAmount] at [slot] without any checks or validation. This will not call any events called by normal methods.
+ * This will still notify any windows backed by this inventory.
+ *
+ * Note: The main reason this method exists is to improve performance over the typical [setItem] and [addItemAmount] methods, which calls events and clones [ItemStack]s.
+ * You should only call this event when you know you can ignore all events and handlers.
+ */
+fun VirtualInventory.unsafeSubtract(slot: Int, amount: Int) {
+    val item = getUnsafeItem(slot)!!
+    check(item.amount >= amount) { "Cannot subtract $amount from item with amount ${item.amount}" }
+    item.subtract(amount)
+    if (item.isEmpty) unsafeItems[slot] = null
+    notifyWindows(slot)
+}
+
+@JvmOverloads
+fun Block.editBlockData(editor: Consumer<BlockData>, applyPhysics: Boolean = true) {
+    editBlockData(BlockData::class.java, editor, applyPhysics)
+}
+
+@JvmOverloads
+fun <D: BlockData> Block.editBlockData(dataType: Class<D>, editor: Consumer<D>, applyPhysics: Boolean = true) {
+    val blockData = this.blockData
+    editor.accept(dataType.cast(blockData))
+    setBlockData(blockData, applyPhysics)
+}
+
+fun ItemStack.isBroken(): Boolean {
+    val maxDamage = getData(DataComponentTypes.MAX_DAMAGE) ?: return false
+    val damage = getData(DataComponentTypes.DAMAGE) ?: return false
+    return damage >= maxDamage && !hasData(DataComponentTypes.UNBREAKABLE);
 }
 
 const val FLUID_EPSILON = 1.0e-6
