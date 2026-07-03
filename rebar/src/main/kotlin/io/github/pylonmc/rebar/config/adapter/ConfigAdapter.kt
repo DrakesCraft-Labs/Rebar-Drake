@@ -10,7 +10,7 @@ import org.bukkit.NamespacedKey
 import org.bukkit.Registry
 import org.joml.*
 import java.lang.reflect.Type
-import java.util.Locale
+import java.util.*
 
 /**
  * Provides instructions on how to deserialize a specific type of value.
@@ -144,7 +144,6 @@ interface ConfigAdapter<T> {
         @JvmField val FLUID_TEMPERATURE = ENUM.from<FluidTemperature>()
         @JvmField val FLUID_CHOICE = FluidChoiceConfigAdapter
         @JvmField val FLUID_OR_ITEM = FluidOrItemConfigAdapter
-        @JvmField val FLUID_WITH_AMOUNT = FluidWithAmountConfigAdapter
         @JvmField val FLUID_WITH_AMOUNT = FluidWithAmountConfigAdapter
         // @formatter:on
 

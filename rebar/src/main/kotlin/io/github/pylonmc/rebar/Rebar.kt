@@ -29,6 +29,7 @@ import io.github.pylonmc.rebar.guide.pages.base.PagedGuidePage
 import io.github.pylonmc.rebar.guide.pages.base.TabbedGuidePage
 import io.github.pylonmc.rebar.i18n.CreativeActionTranslationHandler
 import io.github.pylonmc.rebar.i18n.RebarTranslator
+import io.github.pylonmc.rebar.integration.WailaPlaceholders
 import io.github.pylonmc.rebar.item.RebarInventoryTicker
 import io.github.pylonmc.rebar.item.RebarItem
 import io.github.pylonmc.rebar.item.RebarItemListener
@@ -38,14 +39,13 @@ import io.github.pylonmc.rebar.logistics.CargoRoutes
 import io.github.pylonmc.rebar.metrics.RebarMetrics
 import io.github.pylonmc.rebar.nms.NmsAccessor
 import io.github.pylonmc.rebar.recipe.ConfigurableRecipeType
+import io.github.pylonmc.rebar.recipe.RecipeType
 import io.github.pylonmc.rebar.recipe.logic.RebarRecipeListener
 import io.github.pylonmc.rebar.recipe.logic.RecipeCompletion
-import io.github.pylonmc.rebar.recipe.RecipeType
 import io.github.pylonmc.rebar.registry.RebarRegistry
 import io.github.pylonmc.rebar.util.delayTicks
 import io.github.pylonmc.rebar.util.mergeResource
 import io.github.pylonmc.rebar.waila.Waila
-import io.github.pylonmc.rebar.integration.WailaPlaceholders
 import io.github.pylonmc.rebar.world.WorldStorage
 import io.papermc.paper.ServerBuildInfo
 import io.papermc.paper.plugin.lifecycle.event.types.LifecycleEvents
@@ -259,7 +259,7 @@ object Rebar : JavaPlugin(), RebarAddon {
         PathfindRebarEntityHandler.register(this)
         PiglinRebarEntityHandler.register(this)
         ProjectileRebarEntityHandler.register(this)
-        RemoveRebarEntityHandler.register(this, pm)
+        RemoveRebarEntityHandler.register(this)
         ResurrectRebarEntityHandler.register(this)
         SlimeRebarEntityHandler.register(this)
         SpellcasterRebarEntityHandler.register(this)

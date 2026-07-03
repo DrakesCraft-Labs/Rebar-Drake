@@ -1,6 +1,6 @@
 package io.github.pylonmc.rebar.datatypes
 
-import io.github.pylonmc.rebar.fluid.FluidWithAmount
+import io.github.pylonmc.rebar.recipe.ingredient.FluidWithAmount
 import io.github.pylonmc.rebar.util.rebarKey
 import org.bukkit.persistence.PersistentDataAdapterContext
 import org.bukkit.persistence.PersistentDataContainer
@@ -20,7 +20,7 @@ object FluidWithAmountPersistentDataType : PersistentDataType<PersistentDataCont
     ): PersistentDataContainer {
         val pdc = context.newPersistentDataContainer()
         pdc.set(fluidKey, RebarSerializers.REBAR_FLUID, complex.fluid)
-        pdc.set(amountKey, RebarSerializers.DOUBLE, complex.millibuckets)
+        pdc.set(amountKey, RebarSerializers.DOUBLE, complex.amount)
         return pdc
     }
 

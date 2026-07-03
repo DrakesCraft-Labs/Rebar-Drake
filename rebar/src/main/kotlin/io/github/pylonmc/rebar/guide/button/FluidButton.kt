@@ -2,7 +2,6 @@ package io.github.pylonmc.rebar.guide.button
 
 import io.github.pylonmc.rebar.config.RebarConfig
 import io.github.pylonmc.rebar.content.guide.RebarGuide.Companion.playGuideSound
-import io.github.pylonmc.rebar.fluid.FluidWithAmount
 import io.github.pylonmc.rebar.fluid.RebarFluid
 import io.github.pylonmc.rebar.guide.pages.fluid.FluidRecipesPage
 import io.github.pylonmc.rebar.guide.pages.fluid.FluidUsagesPage
@@ -98,12 +97,6 @@ open class FluidButton private constructor(
         fun of(vararg fluids: RebarFluid?): Item = of(fluids.toList(), null)
 
         /**
-         * @param fluid The fluid to display
-         */
-        @JvmStatic
-        fun of(fluid: FluidWithAmount): Item = of(fluid.millibuckets, fluid.fluid)
-
-        /**
          * @param fluids The list of fluids to display. If multiple fluids are supplied, the button
          * cycles through them. (if no fluids are provided, returns an empty item)
          */
@@ -116,20 +109,20 @@ open class FluidButton private constructor(
          */
         @JvmStatic
         @JvmOverloads
-        fun of(fluids: List<RebarFluid?>, amount: Double?, preDisplayDecorator: Decorator? = null): Item = if (fluids.filterNotNull().isEmpty()) {
+        fun of(fluids: List<RebarFluid?>, amount: Double?, preDisplayDecorator: Decorator = { it }): Item = if (fluids.filterNotNull().isEmpty()) {
             EMPTY
         } else {
-            FluidButton(fluids.filterNotNull().map { it to amount}, preDisplayDecorator ?: { it })
+            FluidButton(fluids.filterNotNull().map { it to amount}, preDisplayDecorator)
         }
 
         @JvmStatic
         @JvmOverloads
-        fun of(fluidChoice: FluidChoice, preDisplayDecorator: Decorator? = null)
-                = of(fluidChoice.fluids.toList(), fluidChoice.amount, preDisplayDecorator ?: { it })
+        fun of(fluidChoice: FluidChoice, preDisplayDecorator: Decorator = { it })
+                = of(fluidChoice.fluids.toList(), fluidChoice.amount, preDisplayDecorator)
 
         @JvmStatic
         @JvmOverloads
-        fun of(fluid: FluidWithAmount, preDisplayDecorator: Decorator? = null)
-            = of(listOf(fluid.fluid), fluid.amountMillibuckets, preDisplayDecorator ?: { it })
+        fun of(fluid: FluidWithAmount, preDisplayDecorator: Decorator =  { it })
+            = of(listOf(fluid.fluid), fluid.amount, preDisplayDecorator)
     }
 }
