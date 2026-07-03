@@ -12,7 +12,7 @@ import kotlin.contracts.contract
 @OptIn(ExperimentalContracts::class)
 class FluidChoice private constructor(val fluids: Set<RebarFluid>, val amount: Double) : FluidOrItemChoice {
 
-    @Contract("null -> false")
+    @Contract("null, _ -> false")
     fun matches(fluid: RebarFluid?, amount: Double): Boolean {
         contract { returns(true) implies (fluid != null) }
         return fluid != null && amount >= this.amount && fluid in fluids
