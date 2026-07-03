@@ -153,6 +153,9 @@ object RebarSerializers {
     @JvmField
     val COMPONENT = ComponentPersistentDataType
 
+    @JvmField
+    val PROCESSOR = ProcessorPersistentDataType
+
     @JvmSynthetic
     internal val CARGO_BLOCK_DATA = CargoBlockPersistentDataType
 
