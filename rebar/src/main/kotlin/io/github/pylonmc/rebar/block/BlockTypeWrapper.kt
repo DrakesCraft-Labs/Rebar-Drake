@@ -1,8 +1,10 @@
 package io.github.pylonmc.rebar.block
 
+import io.github.pylonmc.rebar.block.context.BlockCreateContext
 import io.github.pylonmc.rebar.item.ItemTypeWrapper
 import io.github.pylonmc.rebar.item.builder.ItemStackBuilder
 import io.github.pylonmc.rebar.registry.RebarRegistry
+import io.papermc.paper.datacomponent.item.attribute.AttributeModifierDisplay.override
 import org.bukkit.Keyed
 import org.bukkit.Material
 import org.bukkit.NamespacedKey
@@ -10,6 +12,7 @@ import org.bukkit.Registry
 import org.bukkit.Tag
 import org.bukkit.block.Block
 import org.bukkit.block.data.BlockData
+import org.bukkit.entity.Player
 import org.bukkit.inventory.ItemStack
 import kotlin.collections.mutableSetOf
 
@@ -26,12 +29,26 @@ sealed interface BlockTypeWrapper : Keyed {
     fun createItemStack(count: Int): ItemStack
 
     /**
+     * Places this block type at [block], using [player] as the context for placement if applicable.
+     * @return true if the block was placed successfully, false otherwise.
+     *
+     * Note: This method does not care what [block] is currently
+     */
+    fun placeBlock(block: Block?, player: Player?): Boolean
+
+    /**
      * The vanilla variant of [BlockTypeWrapper].
      */
     @JvmRecord
     data class Vanilla(val blockData: BlockData) : BlockTypeWrapper {
         override fun matches(block: Block?) = block != null && !BlockStorage.isRebarBlock(block) && blockData.matches(block.blockData)
         override fun createItemStack(count: Int) = ItemStack.of(blockData.material, count)
+        override fun placeBlock(block: Block?, player: Player?): Boolean {
+            // TODO: use player place api when its introduced
+            if (block == null) return false
+            block.blockData = blockData
+            return true
+        }
         override fun getKey() = blockData.material.key
     }
 
@@ -41,10 +58,10 @@ sealed interface BlockTypeWrapper : Keyed {
     @JvmRecord
     data class Rebar(val blockSchema: RebarBlockSchema) : BlockTypeWrapper {
         override fun matches(block: Block?) = block != null && BlockStorage.get(block)?.schema == blockSchema
-        override fun createItemStack(count: Int) = blockSchema.defaultItem?.getItemStack(count) ?: ItemStackBuilder.of(blockSchema.material)
-            .name(blockSchema.nameTranslationKey)
-            .lore(blockSchema.loreTranslationKey)
-            .build()
+        override fun createItemStack(count: Int) = blockSchema.defaultItem?.getItemStack(count) ?: throw IllegalArgumentException("Block schema ${blockSchema.key} does not have an item representation.")
+        // TODO: use player place api when its introduced
+        override fun placeBlock(block: Block?, player: Player?) =
+            block != null && BlockStorage.placeBlock(block, blockSchema.key, BlockCreateContext.Default(player, block)) != null
         override fun getKey() = blockSchema.key
     }
 
