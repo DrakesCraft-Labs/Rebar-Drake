@@ -17,8 +17,10 @@ import io.github.pylonmc.rebar.item.ItemTypeWrapper
 import io.github.pylonmc.rebar.item.RebarItemSchema
 import io.github.pylonmc.rebar.nms.NmsAccessor
 import io.github.pylonmc.rebar.registry.RebarRegistry
+import io.github.pylonmc.rebar.util.delayTicks
 import io.github.pylonmc.rebar.util.*
 import io.github.pylonmc.rebar.waila.WailaDisplay
+import io.papermc.paper.util.Tick
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.time.delay
 import net.kyori.adventure.text.Component
@@ -427,7 +429,7 @@ interface GhostBlockHolderRebarBlock : EntityHolderRebarBlock {
                 i++
                 i %= updateTasks.size
 
-                delay(Duration.ofMillis((RebarConfig.GHOST_BLOCK_TICK_INTERVAL * 1000 / 20).toLong()))
+                delayTicks(RebarConfig.GHOST_BLOCK_TICK_INTERVAL.toLong())
             }
         }
     }
