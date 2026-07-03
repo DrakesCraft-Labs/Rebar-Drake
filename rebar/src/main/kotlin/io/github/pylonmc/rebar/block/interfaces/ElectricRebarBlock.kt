@@ -95,7 +95,7 @@ interface ElectricRebarBlock : EntityHolderRebarBlock {
     @ApiStatus.Internal
     companion object : Listener {
 
-        private const val PORT_SCALE = 0.19f
+        const val PORT_SCALE = 0.19f
 
         private val NODE_KEY = rebarKey("node")
 
