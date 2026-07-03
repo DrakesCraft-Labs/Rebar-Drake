@@ -73,6 +73,9 @@ import kotlin.io.path.*
  */
 object Rebar : JavaPlugin(), RebarAddon {
 
+    var loading: Boolean = true
+        private set
+
     /**
      * Ticks once per tick
      */
@@ -327,12 +330,21 @@ object Rebar : JavaPlugin(), RebarAddon {
 
         scope.launch(mainThreadDispatcher) {
             delayTicks(1)
+            validateItems()
             loadRecipes()
             loadResearches()
+            loading = false
         }
 
         val end = System.currentTimeMillis()
         logger.info("Loaded in ${(end - start) / 1000.0}s")
+    }
+
+    private fun validateItems() {
+        for (itemSchema in RebarRegistry.ITEMS) {
+            // pre-merge configs and check for constructor errors
+            itemSchema.getRebarItem()
+        }
     }
 
     private fun loadRecipes() {
