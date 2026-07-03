@@ -11,7 +11,7 @@ import io.github.pylonmc.rebar.event.RebarBlockBreakEvent
 import io.github.pylonmc.rebar.event.RebarBlockPhantomEvent
 import io.github.pylonmc.rebar.event.RebarBlockUnloadEvent
 import io.github.pylonmc.rebar.event.RebarBlockWailaEvent
-import io.github.pylonmc.rebar.event.RebarEntityDeathEvent
+import io.github.pylonmc.rebar.event.RebarEntityRemoveEvent
 import io.github.pylonmc.rebar.event.RebarEntityUnloadEvent
 import io.github.pylonmc.rebar.event.RebarEntityWailaEvent
 import io.github.pylonmc.rebar.i18n.RebarArgument
@@ -458,8 +458,7 @@ class Waila private constructor(
         }
 
         @EventHandler(priority = EventPriority.MONITOR)
-        private fun onEntityRemove(event: RebarEntityDeathEvent) {
-            // TODO: this will need changed to RebarEntityRemoveEvent when my other PR is opened & merged
+        private fun onEntityRemove(event: RebarEntityRemoveEvent) {
             removeOverrides(event.rebarEntity)
         }
 
