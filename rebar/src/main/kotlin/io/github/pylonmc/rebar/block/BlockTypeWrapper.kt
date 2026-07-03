@@ -21,6 +21,8 @@ sealed interface BlockTypeWrapper : Keyed {
 
     fun matches(block: Block?): Boolean
 
+    fun createItemStack() = createItemStack(1)
+
     fun createItemStack(count: Int): ItemStack
 
     /**
