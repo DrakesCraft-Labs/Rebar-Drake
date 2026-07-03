@@ -32,17 +32,17 @@ interface ElectricRebarBlock : EntityHolderRebarBlock {
 
     @ApiStatus.NonExtendable
     fun <T : ElectricNode> addElectricNode(node: T): T {
-        electricBlocks.getOrPut(this, ::mutableListOf).add(node)
+        electricBlocks.getOrPut(this, ::mutableMapOf)[node.name] = node
         ElectricityManager.addNode(node)
         return node
     }
 
     @get:ApiStatus.NonExtendable
     val electricNodes: List<ElectricNode>
-        get() = electricBlocks[this].orEmpty()
+        get() = electricBlocks[this].orEmpty().values.toList()
 
     @ApiStatus.NonExtendable
-    fun getElectricNode(name: String) = electricNodes.find { it.name == name }
+    fun getElectricNode(name: String) = electricBlocks.getOrPut(this, ::mutableMapOf)[name]
 
     @ApiStatus.NonExtendable
     fun getElectricNodeOrThrow(name: String) = getElectricNode(name) ?: throw NoSuchElementException("No electric node with name '$name' found in block at ${block.position}")
@@ -102,13 +102,13 @@ interface ElectricRebarBlock : EntityHolderRebarBlock {
         private val NODES_KEY = rebarKey("nodes")
         private val NODES_TYPE = RebarSerializers.LIST.listTypeFrom(ElectricNode.PDC_TYPE)
 
-        private val electricBlocks = IdentityHashMap<ElectricRebarBlock, MutableList<ElectricNode>>()
+        private val electricBlocks = IdentityHashMap<ElectricRebarBlock, MutableMap<String, ElectricNode>>()
 
         @EventHandler(priority = EventPriority.MONITOR)
         private fun onDeserialize(event: RebarBlockDeserializeEvent) {
             val block = event.rebarBlock as? ElectricRebarBlock ?: return
             val nodes = event.pdc.get(NODES_KEY, NODES_TYPE)!!.toMutableList()
-            electricBlocks[block] = nodes
+            electricBlocks[block] = nodes.associateByTo(mutableMapOf()) { it.name }
 
             for (node in nodes) {
                 ElectricityManager.addNode(node)
@@ -125,13 +125,13 @@ interface ElectricRebarBlock : EntityHolderRebarBlock {
         @EventHandler
         private fun onSerialize(event: RebarBlockSerializeEvent) {
             val block = event.rebarBlock as? ElectricRebarBlock ?: return
-            event.pdc.set(NODES_KEY, NODES_TYPE, electricBlocks[block].orEmpty())
+            event.pdc.set(NODES_KEY, NODES_TYPE, electricBlocks[block].orEmpty().values.toList())
         }
 
         @EventHandler
         private fun onUnload(event: RebarBlockUnloadEvent) {
             if (event.rebarBlock !is ElectricRebarBlock) return
-            for (node in electricBlocks.remove(event.rebarBlock).orEmpty()) {
+            for (node in electricBlocks.remove(event.rebarBlock).orEmpty().values) {
                 ElectricityManager.removeNode(node)
             }
         }
@@ -140,7 +140,7 @@ interface ElectricRebarBlock : EntityHolderRebarBlock {
         private fun onBreak(event: RebarBlockBreakEvent) {
             val block = event.rebarBlock
             if (block !is ElectricRebarBlock) return
-            for (node in electricBlocks.remove(block).orEmpty()) {
+            for (node in electricBlocks.remove(block).orEmpty().values) {
                 node.disconnectAll()
                 ElectricityManager.removeNode(node)
             }
