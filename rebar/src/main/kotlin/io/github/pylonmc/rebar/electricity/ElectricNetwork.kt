@@ -106,24 +106,7 @@ class ElectricNetwork {
             }
         }
 
-        // First, we distribute power from producers to consumers
-        val totalPowerProduced = producers.sumOf { it.power }
-        var powerConsumedByConsumers = roundRobinFill(
-            validConsumers,
-            totalPowerProduced
-        )
-
         var hasUnpoweredConsumers = false
-        // If any consumer isn't getting enough power, we remove the one with the lowest requirement and try again,
-        // until all remaining consumers are getting enough power, or we run out of consumers.
-        while (powerConsumedByConsumers.any { (consumer, power) -> power < consumer.requiredPower }) {
-            validConsumers.removeDouble(validConsumers.maxBy { it.value }.key)
-            powerConsumedByConsumers = roundRobinFill(
-                validConsumers,
-                totalPowerProduced
-            )
-            hasUnpoweredConsumers = true
-        }
 
         val sortedProducers = producers.mapTo(mutableListOf()) { ObjectDoubleMutablePair(it, it.power) }
         sortedProducers.sortWith(
@@ -131,30 +114,38 @@ class ElectricNetwork {
                 .thenComparingDouble { -it.key().power }
         )
 
-        // Now that we know what consumes and produces what, we can try routing said power
         var edgeLoads: Object2DoubleMap<Edge> = Object2DoubleOpenHashMap()
-        val disconnectedEdges = mutableSetOf<Edge>()
-        for ((consumer, consumed) in powerConsumedByConsumers) {
-            var powerLeft = consumed
+        var disconnectedEdges = setOf<Edge>()
+        for (consumer in consumers.sortedBy { it.requiredPower }) {
+            var powerLeft = consumer.requiredPower
+            var currentEdgeLoads: Object2DoubleMap<Edge> = Object2DoubleOpenHashMap(edgeLoads)
+            val currentDisconnectedEdges = disconnectedEdges.toMutableSet()
+            var iterations = 0
             while (!(powerLeft roughlyEquals 0.0)) {
+                if (iterations++ == 100_000) {
+                    throw RuntimeException("Infinite loop detected")
+                }
                 var noPath = 0
                 for (pair in sortedProducers) {
                     val (producer, produced) = pair
-                    if (produced roughlyEquals 0.0) continue
-                    val path = findBestPath(producer, consumer, disconnectedEdges)
+                    if (produced roughlyEquals 0.0) {
+                        noPath++
+                        continue
+                    }
+                    val path = findBestPath(producer, consumer, currentDisconnectedEdges)
                     if (path == null) {
                         noPath++
-                        break
+                        continue
                     }
 
-                    val loadResult = calculateLoadOnEdges(path, edgeLoads, produced)
+                    val loadResult = calculateLoadOnEdges(path, currentEdgeLoads, produced)
                     val powerDelivered = min(loadResult.finalPower, powerLeft)
-                    edgeLoads = loadResult.currents
+                    currentEdgeLoads = loadResult.currents
                     powerLeft -= powerDelivered
                     pair.value(produced - powerDelivered)
                     for ((edge, load) in loadResult.currents) {
                         if (load roughlyEquals edge.powerLimit) {
-                            disconnectedEdges.add(edge)
+                            currentDisconnectedEdges.add(edge)
                         }
                     }
                     if (powerLeft roughlyEquals 0.0) break
@@ -168,14 +159,23 @@ class ElectricNetwork {
 
             if (powerLeft roughlyEquals 0.0) {
                 consumer.isPowered = true
+                edgeLoads = currentEdgeLoads
+                disconnectedEdges = currentDisconnectedEdges
+            } else {
+                hasUnpoweredConsumers = true
             }
         }
 
         val surplusProducers = sortedProducers.filter { (producer, power) -> producer.power roughlyEquals power }
             .mapTo(mutableSetOf()) { it.key() }
 
-        snapshot =
-            ConsumerSnapshot(sortedProducers, disconnectedEdges, edgeLoads, surplusProducers, hasUnpoweredConsumers)
+        snapshot = ConsumerSnapshot(
+            sortedProducers,
+            disconnectedEdges,
+            edgeLoads,
+            surplusProducers,
+            hasUnpoweredConsumers
+        )
     }
 
     private data class ConsumerSnapshot(
@@ -203,7 +203,10 @@ class ElectricNetwork {
                 var noPath = 0
                 for (pair in surplusPower) {
                     val (producer, surplus) = pair
-                    if (surplus roughlyEquals 0.0) continue
+                    if (surplus roughlyEquals 0.0) {
+                        noPath++
+                        continue
+                    }
                     val path = findBestPath(producer, acceptor, disconnectedEdges)
                     if (path == null) {
                         noPath++
@@ -232,37 +235,6 @@ class ElectricNetwork {
                 }
             }
         } while (notAccepted != acceptors.size)
-    }
-
-    /**
-     * Attempts to evenly distribute the given amount across the given keys, without exceeding the limits for any key.
-     * If a key hits its limit, the excess is redistributed among the remaining keys, until either all excess is distributed
-     * or all keys have hit their limits.
-     */
-    private fun <K> roundRobinFill(limits: Object2DoubleMap<K>, amount: Double): Object2DoubleMap<K> {
-        val filled = Object2DoubleOpenHashMap<K>(limits.size)
-        val keys = limits.keys.toList()
-        var remaining = amount
-        val limits = Object2DoubleOpenHashMap(limits)
-        while (!(remaining roughlyEquals 0.0) && limits.isNotEmpty()) {
-            val fillAmount = remaining / limits.size
-            for ((key, limit) in limits.object2DoubleEntrySet().toList()) {
-                val toFill = min(limit, fillAmount)
-                filled.mergeDouble(key, toFill, Double::plus)
-                remaining -= toFill
-                if (toFill >= limit) {
-                    limits.removeDouble(key)
-                } else {
-                    limits[key] = limit - toFill
-                }
-            }
-        }
-        for (key in keys) {
-            if (key !in filled) {
-                filled.put(key, 0.0)
-            }
-        }
-        return filled
     }
 
     /**
@@ -416,3 +388,6 @@ private infix fun Double.roughlyEquals(other: Double): Boolean = abs(this - othe
 
 private operator fun <K> ObjectDoublePair<K>.component1(): K = this.key()
 private operator fun ObjectDoublePair<*>.component2(): Double = this.valueDouble()
+
+private operator fun <K> Object2DoubleMap.Entry<K>.component1(): K = this.key
+private operator fun Object2DoubleMap.Entry<*>.component2(): Double = this.doubleValue
