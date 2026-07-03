@@ -20,6 +20,7 @@ import io.github.pylonmc.rebar.item.builder.ItemStackBuilder
 import io.github.pylonmc.rebar.nms.NmsAccessor
 import io.github.pylonmc.rebar.registry.RebarRegistry
 import io.github.pylonmc.rebar.util.IMMEDIATE_FACES
+import io.github.pylonmc.rebar.util.editBlockData
 import io.github.pylonmc.rebar.util.isChunkLoaded
 import io.github.pylonmc.rebar.util.position.BlockPosition
 import io.github.pylonmc.rebar.util.position.position
@@ -30,11 +31,13 @@ import io.papermc.paper.datacomponent.DataComponentTypes
 import net.kyori.adventure.key.Key
 import org.bukkit.*
 import org.bukkit.block.Block
+import org.bukkit.block.data.BlockData
 import org.bukkit.entity.ItemDisplay
 import org.bukkit.entity.Player
 import org.bukkit.inventory.ItemStack
 import org.bukkit.persistence.PersistentDataAdapterContext
 import org.bukkit.persistence.PersistentDataContainer
+import java.util.function.Consumer
 
 /**
  * Represents a Rebar block in the world.
@@ -139,6 +142,16 @@ open class RebarBlock private constructor(val block: Block) : WailaSupplier, Key
      */
     open fun postInitialise() {}
 
+    @JvmOverloads
+    fun editBlockData(editor: Consumer<BlockData>, applyPhysics: Boolean = true) {
+        block.editBlockData(editor, applyPhysics)
+    }
+
+    @JvmOverloads
+    fun <D : BlockData> editBlockData(dataType: Class<D>, editor: Consumer<D>, applyPhysics: Boolean = true) {
+        block.editBlockData(dataType, editor, applyPhysics)
+    }
+
     /**
      * Used to initialize [blockTextureEntity].
      *
@@ -150,7 +163,7 @@ open class RebarBlock private constructor(val block: Block) : WailaSupplier, Key
      */
     protected open fun setupBlockTexture(entity: BlockTextureEntity): BlockTextureEntity = entity.apply {
         // TODO: Add a way to easily just change the transformation of the entity, without having to override this method entirely
-        val item = getBlockTextureItem() ?: ItemStack.of(Material.BARRIER)
+        val item = getBlockTextureItem()
         item.setData(DataComponentTypes.ITEM_MODEL, Key.key("air"))
         itemStack = item
         itemDisplayTransform = ItemDisplay.ItemDisplayTransform.FIXED
@@ -163,7 +176,7 @@ open class RebarBlock private constructor(val block: Block) : WailaSupplier, Key
      */
     fun refreshBlockTextureItem() {
         blockTextureEntity?.let {
-            it.itemStack = getBlockTextureItem() ?: ItemStack.of(Material.BARRIER)
+            it.itemStack = getBlockTextureItem()
         }
     }
 
@@ -207,7 +220,7 @@ open class RebarBlock private constructor(val block: Block) : WailaSupplier, Key
      *
      * @return the item that should be used to display the block's texture
      */
-    open fun getBlockTextureItem(): ItemStack? {
+    open fun getBlockTextureItem(): ItemStack {
         val builder = if (defaultItem != null) {
             ItemStackBuilder.of(defaultItem.getItemStack())
         } else {
