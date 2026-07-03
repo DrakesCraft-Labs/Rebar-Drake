@@ -163,7 +163,7 @@ open class RebarBlock private constructor(val block: Block) : WailaSupplier, Key
      */
     protected open fun setupBlockTexture(entity: BlockTextureEntity): BlockTextureEntity = entity.apply {
         // TODO: Add a way to easily just change the transformation of the entity, without having to override this method entirely
-        val item = getBlockTextureItem() ?: ItemStack.of(Material.BARRIER)
+        val item = getBlockTextureItem()
         item.setData(DataComponentTypes.ITEM_MODEL, Key.key("air"))
         itemStack = item
         itemDisplayTransform = ItemDisplay.ItemDisplayTransform.FIXED
@@ -176,7 +176,7 @@ open class RebarBlock private constructor(val block: Block) : WailaSupplier, Key
      */
     fun refreshBlockTextureItem() {
         blockTextureEntity?.let {
-            it.itemStack = getBlockTextureItem() ?: ItemStack.of(Material.BARRIER)
+            it.itemStack = getBlockTextureItem()
         }
     }
 
@@ -216,7 +216,7 @@ open class RebarBlock private constructor(val block: Block) : WailaSupplier, Key
      *
      * @return the item that should be used to display the block's texture
      */
-    open fun getBlockTextureItem(): ItemStack? {
+    open fun getBlockTextureItem(): ItemStack {
         val builder = if (defaultItem != null) {
             ItemStackBuilder.of(defaultItem.getItemStack())
         } else {
