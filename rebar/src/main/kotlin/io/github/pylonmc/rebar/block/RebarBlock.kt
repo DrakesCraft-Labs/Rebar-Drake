@@ -95,7 +95,7 @@ open class RebarBlock private constructor(val block: Block) : WailaSupplier, Key
         }
     }
 
-    val defaultItem = RebarRegistry.ITEMS[schema.key]
+    val defaultItem = schema.defaultItem
 
     val isChunkLoaded: Boolean
         get() = block.isChunkLoaded

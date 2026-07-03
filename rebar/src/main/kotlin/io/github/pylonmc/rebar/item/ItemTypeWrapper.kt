@@ -1,12 +1,13 @@
 package io.github.pylonmc.rebar.item
 
+import io.github.pylonmc.rebar.block.BlockTypeWrapper
 import io.github.pylonmc.rebar.registry.RebarRegistry
-import io.papermc.paper.datacomponent.item.attribute.AttributeModifierDisplay.override
 import org.bukkit.*
 import org.bukkit.inventory.ItemStack
 
 /**
  * Allows the representation of both vanilla and Rebar items in a unified way.
+ * @see BlockTypeWrapper
  */
 sealed interface ItemTypeWrapper : Keyed {
 
