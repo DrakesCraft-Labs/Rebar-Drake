@@ -212,13 +212,43 @@ open class RebarItem(val stack: ItemStack) : Keyed {
         }
 
         /**
-         * Checks if [stack] is a Rebar item with schema [schema].
-         */
+        * Checks if [stack] is a Rebar item with schema [schema].
+        */
         @JvmStatic
         @Contract("null -> false")
         fun isRebarItem(stack: ItemStack?, schema: RebarItemSchema): Boolean {
             val otherSchema = RebarItemSchema.fromStack(stack) ?: return false
             return otherSchema === schema
+        }
+
+        /**
+         * Checks if [stack] is a Rebar item but not castable to [clazz].
+         */
+        @JvmStatic
+        @Contract("null -> false")
+        fun isRebarItemAndIsNot(stack: ItemStack?, clazz: Class<*>): Boolean {
+            val schema = RebarItemSchema.fromStack(stack) ?: return false
+            return !schema.isType(clazz)
+        }
+
+        /**
+         * Checks if [stack] is a Rebar item but not with the id [key].
+         */
+        @JvmStatic
+        @Contract("null -> false")
+        fun isRebarItemAndIsNot(stack: ItemStack?, key: NamespacedKey): Boolean {
+            val schema = RebarItemSchema.fromStack(stack) ?: return false
+            return schema.key != key
+        }
+
+        /**
+         * Checks if [stack] is a Rebar item but not with the schema [schema].
+         */
+        @JvmStatic
+        @Contract("null -> false")
+        fun isRebarItemAndIsNot(stack: ItemStack?, schema: RebarItemSchema): Boolean {
+            val otherSchema = RebarItemSchema.fromStack(stack) ?: return false
+            return otherSchema !== schema
         }
 
         /**

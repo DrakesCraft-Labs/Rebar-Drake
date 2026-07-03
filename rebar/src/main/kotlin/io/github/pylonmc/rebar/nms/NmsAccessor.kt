@@ -5,6 +5,7 @@ import io.github.pylonmc.rebar.Rebar
 import io.github.pylonmc.rebar.block.RebarBlock
 import io.github.pylonmc.rebar.entity.packet.BlockTextureEntity
 import io.github.pylonmc.rebar.i18n.PlayerTranslationHandler
+import io.github.pylonmc.rebar.item.loot.LootTableResultBuilder
 import io.github.pylonmc.rebar.util.delayTicks
 import io.github.pylonmc.rebar.util.position.BlockPosition
 import io.papermc.paper.datacomponent.DataComponentType
@@ -25,6 +26,7 @@ import org.bukkit.inventory.InventoryView
 import org.bukkit.inventory.ItemFactory
 import org.bukkit.inventory.ItemStack
 import org.bukkit.inventory.Recipe
+import org.bukkit.loot.LootTable
 import org.bukkit.persistence.PersistentDataContainer
 import org.jetbrains.annotations.ApiStatus
 import java.util.UUID
@@ -191,6 +193,11 @@ interface NmsAccessor {
      * it is significantly faster than checking everything with the paper api equivalents.
      */
     fun componentsEqual(itemStack: ItemStack, components: Map<DataComponentType, Any?>): Boolean
+
+    /**
+     * @see [LootTableResultBuilder.getRandomItems]
+     */
+    fun getRandomItems(world: World, contextSet: NamespacedKey, lootTable: LootTable, optionalRandomLootSeed: Long?, lootContext: LootTableResultBuilder): Collection<ItemStack>
 
     companion object {
         val instance = Class.forName("io.github.pylonmc.rebar.nms.NmsAccessorImpl")
