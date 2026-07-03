@@ -262,7 +262,7 @@ internal object BlockListener : MultiListener {
     @EventHandler(priority = EventPriority.LOWEST, ignoreCancelled = true)
     private fun onFluidPlace(event: PlayerBucketEmptyEvent) {
         val rebarBlock = BlockStorage.get(event.block)
-        if (rebarBlock != null) {
+        if (rebarBlock != null && rebarBlock.block.type != Material.CAULDRON) {
             event.isCancelled = true
         }
     }
