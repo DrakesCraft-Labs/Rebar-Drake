@@ -31,7 +31,6 @@ import org.bukkit.persistence.PersistentDataContainer
 
 class CargoDuct : RebarBlock, BlockBreakRebarBlockHandler, EntityHolderRebarBlock, EntityGroupCulledRebarBlock,
     FacadeRebarBlock {
-    override val facadeDefaultBlockType = Material.STRUCTURE_VOID
 
     var connectedFaces = mutableListOf<BlockFace>()
     val faceGroups = mutableMapOf<BlockFace, EntityGroupCulledRebarBlock.EntityCullingGroup>()
