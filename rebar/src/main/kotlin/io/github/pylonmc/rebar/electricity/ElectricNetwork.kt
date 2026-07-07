@@ -300,7 +300,7 @@ class ElectricNetwork {
         val loads = Object2DoubleOpenHashMap(existingLoads)
         var currentPower = initialPower
         for (edge in path) {
-            val remainingCapacity = edge.powerLimit - (loads[edge] ?: 0.0)
+            val remainingCapacity = edge.powerLimit - loads.getOrDefault(edge, 0.0)
             currentPower = min(currentPower, remainingCapacity)
             loads.mergeDouble(edge, currentPower, Double::plus)
         }

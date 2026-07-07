@@ -619,7 +619,3 @@ unit:
     singular: "watt"
     plural: "watts"
     abbr: "W"
-  watts_per_millibucket:
-    singular: "watt per millibucket"
-    plural: "watts per millibucket"
-    abbr: "W/mB"
