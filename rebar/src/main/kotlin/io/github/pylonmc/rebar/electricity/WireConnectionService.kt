@@ -219,6 +219,7 @@ internal object WireConnectionService : Listener {
             .transformation(getDisplayTransform(otherEnd, playerLocation, otherEnd))
             .itemStack(ItemStackBuilder.of(wire.displayMaterial).addCustomModelDataString("wire:${(wire as RebarItem).key}"))
             .persistent(false)
+            .brightness(15)
             .build(otherEnd)
         wiresConnecting[display] = node
         playersConnecting[player.uniqueId] = display
