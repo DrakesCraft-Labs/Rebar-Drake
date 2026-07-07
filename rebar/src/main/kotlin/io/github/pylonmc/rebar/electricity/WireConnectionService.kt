@@ -113,7 +113,7 @@ internal object WireConnectionService : Listener {
         player.sendActionBar(Component.empty())
 
         val wireItem = playerInv.getItem(event.hand)
-        val wire = RebarItem.from<WireRebarItem>(wireItem) ?: return
+        val wire = RebarItem.fromStack<WireRebarItem>(wireItem) ?: return
         connectingNode.connect(thisNode)
 
         ElectricNetwork.Edge(thisNode, connectingNode).powerLimit = wire.maxPower
@@ -213,11 +213,11 @@ internal object WireConnectionService : Listener {
             handItem to thisNode
         }
 
-        val wire = RebarItem.from<WireRebarItem>(wireItem) ?: return false
+        val wire = RebarItem.fromStack<WireRebarItem>(wireItem) ?: return false
         val otherEnd = locations[node] ?: return false
         val display = ItemDisplayBuilder()
             .transformation(getDisplayTransform(otherEnd, playerLocation, otherEnd))
-            .material(wire.displayMaterial)
+            .itemStack(ItemStackBuilder.of(wire.displayMaterial).addCustomModelDataString("wire:${(wire as RebarItem).key}"))
             .persistent(false)
             .build(otherEnd)
         wiresConnecting[display] = node
@@ -274,7 +274,7 @@ internal object WireConnectionService : Listener {
     private fun updateWireMaterial(player: Player, item: WireRebarItem) {
         val connectingEntity = playersConnecting[player.uniqueId] ?: return
         val material = item.displayMaterial
-        connectingEntity.setItemStack(ItemStackBuilder.of(material).addCustomModelDataString("wire").build())
+        connectingEntity.setItemStack(ItemStackBuilder.of(material).addCustomModelDataString("wire:${(item as RebarItem).key}").build())
     }
 
     private fun getDisplayTransform(from: Location, to: Location, entityLocation: Location): Matrix4f {
@@ -347,8 +347,8 @@ internal object WireConnectionService : Listener {
     private fun onPlayerScroll(event: PlayerItemHeldEvent) {
         val player = event.player
         if (player.uniqueId !in playersConnecting) return
-        val item = player.inventory.getItem(event.newSlot)?.let(RebarItem::fromStack)
-        if (item !is WireRebarItem) {
+        val item = player.inventory.getItem(event.newSlot)?.let { RebarItem.fromStack<WireRebarItem>(it) }
+        if (item == null) {
             deleteConnecting(player)
         } else {
             updateWireMaterial(player, item)
@@ -360,8 +360,8 @@ internal object WireConnectionService : Listener {
         val player = event.player
         if (player.inventory.heldItemSlot != event.slot) return
         if (player.uniqueId !in playersConnecting) return
-        val item = RebarItem.fromStack(event.newItemStack)
-        if (item !is WireRebarItem) {
+        val item = RebarItem.fromStack<WireRebarItem>(event.newItemStack)
+        if (item == null) {
             deleteConnecting(player)
         } else {
             updateWireMaterial(player, item)

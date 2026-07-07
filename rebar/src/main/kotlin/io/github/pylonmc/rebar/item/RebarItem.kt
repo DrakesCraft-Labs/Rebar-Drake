@@ -148,8 +148,8 @@ open class RebarItem(val stack: ItemStack) : Keyed {
             register(T::class.java, template, rebarBlockKey)
 
         /**
-         * Gets a RebarItem from an ItemStack if the item is a Rebar item
-         * Returns null if the ItemStack is not a Rebar item
+         * Gets a RebarItem from an [ItemStack] if the item is a Rebar item
+         * Returns null if the [ItemStack] is not a Rebar item
          *
          * If you only want [RebarItem]s of a specific type, use the class specific method for better performance,
          * it will check the underlying [RebarItemSchema.itemClass] *before* it constructs the [RebarItem]
@@ -164,8 +164,8 @@ open class RebarItem(val stack: ItemStack) : Keyed {
         }
 
         /**
-         * Converts a regular ItemStack to a RebarItem of class [clazz]
-         * Returns null if the ItemStack is not a Rebar item or is not of the specified [clazz]
+         * Converts a regular [ItemStack] to a [RebarItem] of class [clazz]
+         * Returns null if the [ItemStack] is not a Rebar item or is not of the specified [clazz]
          */
         @JvmStatic
         @Contract("null -> null")
@@ -175,12 +175,12 @@ open class RebarItem(val stack: ItemStack) : Keyed {
             if (!schema.isType(clazz)) return null
             return schema.itemClass.cast(schema.loadConstructor.invoke(stack)) as T?
         }
-
+        /**
+         * Converts a regular [ItemStack] to a [RebarItem] of class [T]
+         * Returns null if the [ItemStack] is not a Rebar item or is not of the specified class
+         */
         @JvmSynthetic
-        inline fun <reified T> from(stack: ItemStack?): T? {
-            val rebarItem = fromStack(stack) ?: return null
-            return rebarItem as? T
-        }
+        inline fun <reified T> fromStack(stack: ItemStack?): T? = fromStack(stack, T::class.java)
 
         /**
          * Checks if [stack] is a Rebar item.
