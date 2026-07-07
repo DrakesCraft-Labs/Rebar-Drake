@@ -1,8 +1,11 @@
+@file:Suppress("unused")
+
 package io.github.pylonmc.rebar.util.gui.unit
 
+import io.github.pylonmc.rebar.Rebar
+import io.github.pylonmc.rebar.i18n.RebarTranslator.Companion.translator
 import net.kyori.adventure.text.Component
 import net.kyori.adventure.text.ComponentLike
-import net.kyori.adventure.text.format.NamedTextColor
 import net.kyori.adventure.text.format.Style
 import net.kyori.adventure.text.format.TextColor
 import java.math.BigDecimal
@@ -14,56 +17,125 @@ import java.util.*
 /**
  * Handles formatting of a specific unit. Call [format] to format a value using this unit.
  *
- * @param name The English name of the unit (for example 'kilograms')
  * @param singular A component representing the long singular form of this unit (kilogram, meter, liter, etc)
  * @param plural A component representing the long plural form of this unit (kilograms, meters, liters, etc)
- * @param abbreviation A component representing the abbreviated form of this unit (kg, m, L, etc)
+ * @param abbreviation A component representing the abbreviated form of this unit (kg, m, L, etc). May be null to indicate that the unit does not have an abbreviation
+ * @param noSpace whether there should not be a space between the value and the abbreviated version of the unit (e.g. "100%" not "100 %")
  * @param defaultPrefix The prefix (kilo, nano, etc) used for this unit unless specified while formatting.
  * For example, if you create a 'grams' unit and specify [MetricPrefix.KILO] as the default prefix, calling
  * [format] with 100 will return '100 kilograms'
  * @param defaultStyle The style to apply to the unit (not the value) to the output.
  */
 class UnitFormat @JvmOverloads constructor(
-    val name: String,
     val singular: Component,
     val plural: Component,
     val abbreviation: Component? = null,
+    val noSpace: Boolean = false,
     val defaultPrefix: MetricPrefix = MetricPrefix.NONE,
-    val defaultStyle: Style = Style.empty(),
+    val defaultStyle: Style = Style.empty()
 ) {
 
-    private constructor(
-        name: String,
-        color: TextColor,
-        abbreviate: Boolean,
-        prefix: MetricPrefix = MetricPrefix.NONE,
-    ) : this(
-        name = name,
-        singular = Component.translatable("rebar.unit.$name.singular"),
-        plural = Component.translatable("rebar.unit.$name.plural"),
-        abbreviation = Component.translatable("rebar.unit.$name.abbr").takeIf { abbreviate },
-        defaultPrefix = prefix,
-        defaultStyle = Style.style(color),
-    )
+    /**
+     * Enables the use of this unit in the custom `<unit:[name]>` tag in [Rebar's custom MiniMessage parser][io.github.pylonmc.rebar.i18n.customMiniMessage]
+     *
+     * @param name the name to be used in the tag
+     * @return this [UnitFormat]
+     */
+    fun allowUseInUnitTag(name: String) = apply { namedUnits[name] = this }
 
-    init {
-        allUnits[name] = this
+    /**
+     * Returns a **new** [UnitFormat] with the same parameters as this one but with a different default prefix
+     */
+    fun withDefaultPrefix(prefix: MetricPrefix) = UnitFormat(singular, plural, abbreviation, noSpace, prefix, defaultStyle)
+
+    /**
+     * Returns a **new** [UnitFormat] with the same parameters as this one but with a different default style
+     */
+    fun withDefaultStyle(style: Style) = UnitFormat(singular, plural, abbreviation, noSpace, defaultPrefix, style)
+
+    /**
+     * Returns a new [UnitFormat] that combines this and [other] over multiplication. For example,
+     * combining "watt" and "hour" will give you "watt-hour".
+     *
+     * The default prefix for [other] will be baked into the unit (e.x. "watt" * "kilohour" = "watt-kilohour"),
+     * and the new unit will use the default prefix/prefix behavior of the first unit. If you wish to change the
+     * prefix for the second unit, use [withDefaultPrefix].
+     *
+     * The default style will be equivalent to `this.defaultStyle.merge(other.defaultStyle)`.
+     *
+     * The new unit will only have an abbreviation if both input units have an abbreviation.
+     */
+    fun multiply(other: UnitFormat): UnitFormat {
+        val singular = this.singular
+            .append(MULTIPLICATION_FULL)
+            .append(other.defaultPrefix.translationKey)
+            .append(other.singular)
+        val plural = this.singular
+            .append(MULTIPLICATION_FULL)
+            .append(other.defaultPrefix.translationKey)
+            .append(other.plural)
+        val abbr = if (this.abbreviation != null && other.abbreviation != null) {
+            this.abbreviation
+                .append(MULTIPLICATION_ABBR)
+                .append(other.defaultPrefix.abbreviationKey)
+                .append(other.abbreviation)
+        } else {
+            null
+        }
+        val style = this.defaultStyle.merge(other.defaultStyle)
+        return UnitFormat(singular, plural, abbr, noSpace, defaultPrefix, style)
+    }
+
+    /**
+     * Returns a new [UnitFormat] that combines this and [other] over division. For example,
+     * combining "watt" and "hour" will give you "watt per hour".
+     *
+     * The default prefix for [other] will be baked into the unit (e.x. "watt" / "kilohour" = "watt per kilohour"),
+     * and the new unit will use the default prefix/prefix behavior of the first unit. If you wish to change the
+     * prefix for the second unit, use [withDefaultPrefix].
+     *
+     * The default style will be equivalent to `this.defaultStyle.merge(other.defaultStyle)`.
+     *
+     * The new unit will only have an abbreviation if both input units have an abbreviation.
+     */
+    fun divide(other: UnitFormat): UnitFormat {
+        val singular = this.singular
+            .append(DIVISION_FULL)
+            .append(other.defaultPrefix.translationKey)
+            .append(other.singular)
+        val plural = this.plural
+            .append(DIVISION_FULL)
+            .append(other.defaultPrefix.translationKey)
+            .append(other.singular)
+        val abbr = if (this.abbreviation != null && other.abbreviation != null) {
+            this.abbreviation
+                .append(DIVISION_ABBR)
+                .append(other.defaultPrefix.abbreviationKey)
+                .append(other.abbreviation)
+        } else {
+            null
+        }
+        val style = this.defaultStyle.merge(other.defaultStyle)
+        return UnitFormat(singular, plural, abbr, noSpace, defaultPrefix, style)
     }
 
     fun format(value: BigDecimal) = Formatted(value.stripTrailingZeros())
 
-    fun format(value: Int) = format(BigDecimal.valueOf(value.toLong()))
+    fun format(value: Int) = format(value.toLong())
 
-    fun format(value: Long) = format(BigDecimal.valueOf(value))
+    fun format(value: Long) = format(value.toBigDecimal())
 
-    fun format(value: Float): Formatted {
-        check(!value.isNaN() && !value.isInfinite()) { "Cannot format NaN or infinite values" }
-        return format(BigDecimal.valueOf(value.toDouble()))
-    }
+    /**
+     * NaN and infinity are not supported
+     */
+    fun format(value: Float) = format(value.toDouble())
 
+    /**
+     * NaN and infinity are not supported
+     */
     fun format(value: Double): Formatted {
-        check(!value.isNaN() && !value.isInfinite()) { "Cannot format NaN or infinite values" }
-        return format(BigDecimal.valueOf(value))
+        require(!value.isNaN() && !value.isInfinite()) { "Cannot format NaN or infinite values" }
+        return format(value.toBigDecimal())
     }
 
     /**
@@ -82,23 +154,26 @@ class UnitFormat @JvmOverloads constructor(
         private val badPrefixes = EnumSet.noneOf(MetricPrefix::class.java)
 
         /**
-         * Sets the number of significant figures. For example, if this is set to 3, then a value
-         * of 0.472894 will be shown as 0.473.
+         * Sets the number of significant figures. Uses [RoundingMode.HALF_UP] for rounding.
+         * For example, if this is set to `3`, then a value of `0.472894` will be shown as `0.473`.
          */
         fun significantFigures(sigFigs: Int) = apply { this.sigFigs = sigFigs }
 
         /**
          * Sets the number of decimal places. This overrides significant figures if both are set.
+         * If [force] is true, the formatted number will always have this many decimal places.
+         * Uses [RoundingMode.HALF_UP] for rounding.
          */
-        fun decimalPlaces(decimalPlaces: Int) = apply { this.decimalPlaces = decimalPlaces }
+        fun decimalPlaces(decimalPlaces: Int, force: Boolean) = apply {
+            this.decimalPlaces = decimalPlaces
+            this.forceDecimalPlaces = force
+        }
 
         /**
-         * Sets whether a value should always have decimal places. For example, if set to true, then
-         * the value 145 will be displayed as '145.0'
-         *
-         * This overrides decimal places if both are set.
+         * Sets the number of decimal places. This overrides significant figures if both are set.
+         * Uses [RoundingMode.HALF_UP] for rounding.
          */
-        fun forceDecimalPlaces(force: Boolean) = apply { this.forceDecimalPlaces = force }
+        fun decimalPlaces(decimalPlaces: Int) = decimalPlaces(decimalPlaces, false)
 
         /**
          * Sets whether the abbreviation should be used instead of the full name.
@@ -144,7 +219,7 @@ class UnitFormat @JvmOverloads constructor(
         /**
          * Builds a component representing the value and unit.
          */
-        override fun asComponent(): Component {
+        fun build(): Component {
             var usedValue = value.round(MathContext(sigFigs, RoundingMode.HALF_UP))
             usedValue = usedValue.setScale(decimalPlaces, RoundingMode.HALF_UP)
             if (!forceDecimalPlaces) {
@@ -153,10 +228,8 @@ class UnitFormat @JvmOverloads constructor(
 
             val usedPrefix = if (prefix == null) {
                 val exponent = value.precision() - value.scale() - if (value.signum() == 0) 0 else 1
-                var prefix = MetricPrefix.entries.firstOrNull { it.scale <= exponent } ?: defaultPrefix
-                while (prefix in badPrefixes) {
-                    prefix = MetricPrefix.entries.getOrNull(MetricPrefix.entries.indexOf(prefix) + 1) ?: break
-                }
+                val prefix = MetricPrefix.entries.firstOrNull { it.scale <= exponent && it !in badPrefixes }
+                    ?: defaultPrefix
                 usedValue = usedValue.movePointRight(prefix.scale)
                 prefix
             } else {
@@ -167,191 +240,192 @@ class UnitFormat @JvmOverloads constructor(
             var unit = Component.empty().style(unitStyle)
             unit = if (abbreviate && abbreviation != null) {
                 unit
-                    .append(usedPrefix.abbreviation)
+                    .append(if (noSpace) Component.empty() else Component.text(" "))
+                    .append(usedPrefix.abbreviationKey)
                     .append(abbreviation)
             } else {
                 unit
-                    .append(usedPrefix.fullName)
+                    .append(Component.text(" "))
+                    .append(usedPrefix.translationKey)
                     .append(if (usedValue == BigDecimal.ONE) singular else plural)
             }
 
-            return number
-                .append(Component.text(" "))
-                .append(unit)
+            return number.append(unit)
         }
+
+        /**
+         * Alias for [build]
+         */
+        override fun asComponent() = build()
     }
 
     companion object {
 
+        private val MULTIPLICATION_FULL = Component.translatable("rebar.unit.separator.multiply.full")
+        private val MULTIPLICATION_ABBR = Component.translatable("rebar.unit.separator.multiply.abbr")
+        private val DIVISION_FULL = Component.translatable("rebar.unit.separator.divide.full")
+        private val DIVISION_ABBR = Component.translatable("rebar.unit.separator.divide.abbr")
+
         @JvmSynthetic
-        internal val allUnits = mutableMapOf<String, UnitFormat>()
+        internal val namedUnits = mutableMapOf<String, UnitFormat>()
+
+        private fun rebar(
+            name: String,
+            style: Style,
+            prefix: MetricPrefix = MetricPrefix.NONE,
+            noSpace: Boolean = false,
+        ): UnitFormat {
+            val singular = Component.translatable("rebar.unit.$name.singular")
+            val abbrKey = "rebar.unit.$name.abbr"
+            val abbr = Component.translatable(abbrKey).takeIf {
+                Rebar.translator.canTranslate(abbrKey, Rebar.defaultLanguage)
+            }
+            return UnitFormat(
+                singular = singular,
+                plural = Component.translatable("rebar.unit.$name.plural"),
+                abbreviation = abbr,
+                noSpace = noSpace,
+                defaultPrefix = prefix,
+                defaultStyle = style,
+            ).allowUseInUnitTag(name)
+        }
 
         @JvmField
-        val BLOCKS = UnitFormat(
+        val BLOCKS = rebar(
             "blocks",
-            TextColor.color(0x1eaa56),
-            abbreviate = false
+            Style.style(TextColor.color(0x1eaa56))
         )
 
         @JvmField
-        val BLOCKS_PER_SECOND = UnitFormat(
-            "blocks_per_second",
-            TextColor.color(0x0ae256),
-            abbreviate = true
-        )
-
-        @JvmField
-        val CHUNKS = UnitFormat(
+        val CHUNKS = rebar(
             "chunks",
-            TextColor.color(0x136D37),
-            abbreviate = false
+            Style.style(TextColor.color(0x136D37))
         )
 
         @JvmField
-        val HEARTS = UnitFormat("hearts", TextColor.color(0xdb3b43), abbreviate = true)
+        val HEARTS = rebar(
+            "hearts",
+            Style.style(TextColor.color(0xdb3b43))
+        )
 
         @JvmField
-        val PERCENT = UnitFormat(
+        val PERCENT = rebar(
             "percent",
-            TextColor.color(0xa6dd58),
-            abbreviate = true
+            Style.empty(),
+            noSpace = true
         )
 
         @JvmField
-        val RESEARCH_POINTS = UnitFormat(
+        val RESEARCH_POINTS = rebar(
             "research_points",
-            TextColor.color(0x70da65),
-            abbreviate = false
+            Style.style(TextColor.color(0x70da65))
         )
 
         @JvmField
-        val CELSIUS = UnitFormat(
+        val CELSIUS = rebar(
             "celsius",
-            TextColor.color(0xe27f41),
-            abbreviate = true
+            Style.style(TextColor.color(0xe27f41))
         )
 
         @JvmField
-        val MILLIBUCKETS = UnitFormat(
+        val MILLIBUCKETS = rebar(
             "buckets",
-            TextColor.color(0xe3835f2),
-            abbreviate = true,
+            Style.style(TextColor.color(0xe3835f2)),
             prefix = MetricPrefix.MILLI
         )
 
         @JvmField
-        val MILLIBUCKETS_PER_SECOND = UnitFormat(
-            "buckets_per_second",
-            TextColor.color(0xe3835f2),
-            abbreviate = true,
-            prefix = MetricPrefix.MILLI
-        )
-
-        @JvmField
-        val MILLIBUCKETS_PER_ITEM = UnitFormat(
-            "buckets_per_item",
-            TextColor.color(0xe3835f2),
-            abbreviate = true,
-            prefix = MetricPrefix.MILLI
-        )
-
-        @JvmField
-        val DAYS = UnitFormat(
+        val DAYS = rebar(
             "days",
-            TextColor.color(0xc9c786),
-            abbreviate = true
+            Style.style(TextColor.color(0xc9c786))
         )
 
         @JvmField
-        val HOURS = UnitFormat(
+        val HOURS = rebar(
             "hours",
-            TextColor.color(0xc9c786),
-            abbreviate = true
+            Style.style(TextColor.color(0xc9c786))
         )
 
         @JvmField
-        val MINUTES = UnitFormat(
+        val MINUTES = rebar(
             "minutes",
-            TextColor.color(0xc9c786),
-            abbreviate = true
+            Style.style(TextColor.color(0xc9c786))
         )
 
         @JvmField
-        val SECONDS = UnitFormat(
+        val SECONDS = rebar(
             "seconds",
-            TextColor.color(0xc9c786),
-            abbreviate = true,
+            Style.style(TextColor.color(0xc9c786)),
         )
 
         @JvmField
-        val EXPERIENCE = UnitFormat(
-            "experience",
-            TextColor.color(0xb2e01a),
-            abbreviate = true
-        )
-
-        @JvmField
-        val EXPERIENCE_PER_SECOND = UnitFormat(
-            "experience_per_second",
-            TextColor.color(0xb2e01a),
-            abbreviate = true
-        )
-
-        @JvmField
-        val ITEMS = UnitFormat(
-            "items",
-            TextColor.color(0x09e2c2),
-            abbreviate = false
-        )
-
-        @JvmField
-        val ITEMS_PER_SECOND = UnitFormat(
-            "items_per_second",
-            TextColor.color(0x09e2c2),
-            abbreviate = true,
+        val JOULES = rebar(
+            "joules",
+            Style.style(TextColor.color(0xF2A900)),
             prefix = MetricPrefix.NONE
         )
 
         @JvmField
-        val STACKS = UnitFormat(
-            "stacks",
-            TextColor.color(0x44d2e2),
-            abbreviate = false
-        )
-
-        @JvmField
-        val CYCLES_PER_SECOND = UnitFormat(
-            "cycles_per_second",
-            TextColor.color(0xb672bf),
-            abbreviate = true
-        )
-
-        @JvmField
-        val JOULES = UnitFormat(
-            "joules",
-            TextColor.color(0xF2A900),
-            abbreviate = true
-        )
-
-        @JvmField
-        val WATTS = UnitFormat(
+        val WATTS = rebar(
             "watts",
-            TextColor.color(0xF2A900),
-            abbreviate = true
+            Style.style(TextColor.color(0xF2A900)),
+            prefix = MetricPrefix.NONE
         )
 
         @JvmField
-        val WATTS_PER_MILLIBUCKET = UnitFormat(
-            "watts_per_millibucket",
-            TextColor.color(0xF2A900),
-            abbreviate = true
+        val EXPERIENCE = rebar(
+            "experience",
+            Style.style(TextColor.color(0xb2e01a))
         )
+
+        @JvmField
+        val ITEMS = rebar(
+            "items",
+            Style.style(TextColor.color(0x09e2c2))
+        )
+
+        @JvmField
+        val STACKS = rebar(
+            "stacks",
+            Style.style(TextColor.color(0x44d2e2))
+        )
+
+        @JvmField
+        val CYCLES = rebar(
+            "cycles",
+            Style.style(TextColor.color(0xb672bf)),
+            prefix = MetricPrefix.NONE
+        )
+
+        @JvmField
+        val CYCLES_PER_SECOND = CYCLES.divide(SECONDS)
+
+        @JvmField
+        val BLOCKS_PER_SECOND = BLOCKS.divide(SECONDS)
+
+        @JvmField
+        val ITEMS_PER_SECOND = ITEMS.divide(SECONDS)
+
+        @JvmField
+        val EXPERIENCE_PER_SECOND = EXPERIENCE.divide(SECONDS)
+
+        @JvmField
+        val MILLIBUCKETS_PER_SECOND = MILLIBUCKETS.divide(SECONDS)
+
+        @JvmField
+        val MILLIBUCKETS_PER_ITEM = MILLIBUCKETS.divide(ITEMS)
 
         /**
-         * Helper function that automatically formats a duration into days:hours:minutes:seconds
+         * Helper function that automatically formats a duration into `<days> <hours> <minutes> <seconds> <milliseconds>?`,
+         * skipping any that are 0.
+         *
+         * @param duration the duration to format
+         * @param abbreviate whether to abbreviate the units
+         * @param useMillis whether to add milliseconds
          */
         @JvmStatic
-        @JvmOverloads fun formatDuration(duration: Duration, abbreviate: Boolean = true, useMillis: Boolean = false): Component {
+        @JvmOverloads
+        fun formatDuration(duration: Duration, abbreviate: Boolean = true, useMillis: Boolean = false): Component {
             var component = Component.text()
             var isEmpty = true
 
