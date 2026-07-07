@@ -409,6 +409,7 @@ object Rebar : JavaPlugin(), RebarAddon {
         FluidPipePlacementService.cleanup()
         BlockStorage.cleanupEverything()
         EntityStorage.cleanupEverything()
+        WorldStorage.saveAll()
     }
 
     override fun onDisable() {

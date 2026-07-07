@@ -355,6 +355,11 @@ class ElectricNetwork {
                 world.storage[unidirectionalKey, RebarSerializers.BOOLEAN] = value
                 from.network.markDirty()
             }
+
+        fun clearData() {
+            world.storage.remove(powerLimitKey)
+            world.storage.remove(unidirectionalKey)
+        }
     }
 
     companion object {

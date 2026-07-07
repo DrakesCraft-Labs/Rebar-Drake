@@ -66,8 +66,9 @@ class WorldStorage private constructor(val worldId: UUID) {
     }
 
     fun remove(key: NamespacedKey) {
-        data.remove(key)
-        dirtyData.add(key)
+        if (data.remove(key) != null) {
+            dirtyData.add(key)
+        }
     }
 
     /**
@@ -104,6 +105,13 @@ class WorldStorage private constructor(val worldId: UUID) {
             val storage = storages.remove(event.world.uid) ?: return
             storage.saveJob.cancel()
             storage.saveAll()
+        }
+
+        @JvmSynthetic
+        internal fun saveAll() {
+            for (storage in storages.values) {
+                storage.saveAll()
+            }
         }
     }
 }

@@ -49,6 +49,9 @@ sealed class ElectricNode(
     fun isConnectedTo(other: ElectricNode) = other.id in internalConnections
 
     fun disconnectFrom(other: ElectricNode) {
+        ElectricNetwork.Edge(this, other).clearData()
+        ElectricNetwork.Edge(other, this).clearData()
+
         internalConnections.remove(other.id)
         other.internalConnections.remove(this.id)
 
