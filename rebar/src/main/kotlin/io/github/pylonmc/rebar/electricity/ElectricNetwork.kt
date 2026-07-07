@@ -239,8 +239,9 @@ class ElectricNetwork {
 
     /**
      * Calculates the load for edges based on a greedy best first search from the producer to the consumer, using the graph distance to consumers as the heuristic.
+     *
+     * Implementation note: Seggan would've used A*, but in this case, since the heuristic is perfect, greedy best first search is more efficient.
      */
-    // I would've used A*, but in this case, since the heuristic is perfect, greedy best first search is more efficient.
     private fun findBestPath(
         producer: ElectricNode,
         consumer: ElectricNode,

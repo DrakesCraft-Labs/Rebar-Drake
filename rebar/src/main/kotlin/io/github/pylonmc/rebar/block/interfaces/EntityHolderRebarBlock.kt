@@ -175,7 +175,7 @@ interface EntityHolderRebarBlock {
             holders.remove(block)
         }
 
-        @EventHandler(priority = EventPriority.HIGHEST) // remove entities after as many break handlers before as possible have run
+        @EventHandler(priority = EventPriority.MONITOR) // remove entities after as many break handlers before as possible have run
         private fun onBreak(event: RebarBlockBreakEvent) {
             val block = event.rebarBlock
             if (block is EntityHolderRebarBlock) {

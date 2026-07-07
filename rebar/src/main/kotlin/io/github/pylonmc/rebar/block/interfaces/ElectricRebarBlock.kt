@@ -45,7 +45,19 @@ interface ElectricRebarBlock : EntityHolderRebarBlock {
     fun getElectricNode(name: String) = electricBlocks.getOrPut(this, ::mutableMapOf)[name]
 
     @ApiStatus.NonExtendable
-    fun getElectricNodeOrThrow(name: String) = getElectricNode(name) ?: throw NoSuchElementException("No electric node with name '$name' found in block at ${block.position}")
+    fun getElectricNodeOrThrow(name: String) =
+        getElectricNode(name) ?: throw NoSuchElementException("No electric node with name '$name' found in block at ${block.position}")
+
+    @ApiStatus.NonExtendable
+    fun <E : ElectricNode> getElectricNode(name: String, clazz: Class<E>): E? {
+        val node = getElectricNode(name)
+        if (!clazz.isInstance(node)) return null
+        return clazz.cast(node)
+    }
+
+    @ApiStatus.NonExtendable
+    fun <E : ElectricNode> getElectricNodeOrThrow(name: String, clazz: Class<E>): E =
+        getElectricNode(name, clazz) ?: throw NoSuchElementException("No electric node '$name' of type ${clazz.simpleName} found")
 
     /**
      * Adds an electric node to this block that has a physical presence in the form of several display entities.
@@ -66,8 +78,7 @@ interface ElectricRebarBlock : EntityHolderRebarBlock {
         )
         val interaction = addEntity(
             "interaction_${node.id}", InteractionBuilder()
-                .width(PORT_SCALE)
-                .height(PORT_SCALE)
+                .size(PORT_SCALE)
                 .build(block.location.toCenterLocation().add(face.direction * (radius - 0.001) + offset))
         )
         interaction.persistentDataContainer.set(NODE_KEY, RebarSerializers.UUID, node.id)
@@ -147,3 +158,9 @@ interface ElectricRebarBlock : EntityHolderRebarBlock {
         }
     }
 }
+
+@JvmSynthetic
+inline fun <reified E : ElectricNode> ElectricRebarBlock.getElectricNode(name: String): E? = getElectricNode(name, E::class.java)
+
+@JvmSynthetic
+inline fun <reified E : ElectricNode> ElectricRebarBlock.getElectricNodeOrThrow(name: String): E = getElectricNodeOrThrow(name, E::class.java)

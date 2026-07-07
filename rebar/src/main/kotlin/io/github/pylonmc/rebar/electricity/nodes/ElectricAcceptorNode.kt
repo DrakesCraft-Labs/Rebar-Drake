@@ -16,6 +16,8 @@ class ElectricAcceptorNode private constructor(
         block: BlockPosition
     ) : this(UUID.randomUUID(), name, block, mutableSetOf())
 
+    override val type = Type.ACCEPTOR
+
     @get:JvmSynthetic
     @set:JvmSynthetic
     internal var handler = AcceptorHandler { 0.0 }

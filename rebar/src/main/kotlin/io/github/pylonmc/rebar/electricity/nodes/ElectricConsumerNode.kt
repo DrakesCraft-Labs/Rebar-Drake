@@ -3,6 +3,7 @@ package io.github.pylonmc.rebar.electricity.nodes
 import io.github.pylonmc.rebar.datatypes.RebarSerializers
 import io.github.pylonmc.rebar.util.position.BlockPosition
 import io.github.pylonmc.rebar.util.rebarKey
+import it.unimi.dsi.fastutil.booleans.BooleanConsumer
 import org.bukkit.persistence.PersistentDataContainer
 import java.util.*
 
@@ -19,6 +20,8 @@ class ElectricConsumerNode private constructor(
         block: BlockPosition,
         requiredPower: Double
     ) : this(UUID.randomUUID(), name, block, mutableSetOf(), requiredPower)
+
+    override val type = Type.CONSUMER
 
     /**
      * The amount of power that this consumer requires, measured in watts. Should the network not be able to provide this
@@ -37,7 +40,19 @@ class ElectricConsumerNode private constructor(
      */
     var isPowered: Boolean = false
         @JvmSynthetic
-        internal set
+        internal set(value) {
+            field = value
+            whenPowerChanges.accept(value)
+        }
+
+    private var whenPowerChanges = BooleanConsumer {}
+
+    /**
+     * Called with the new state of [isPowered] whenever it changes
+     */
+    fun onPowerChange(action: BooleanConsumer) {
+        whenPowerChanges = action
+    }
 
     override fun serialize(pdc: PersistentDataContainer) {
         pdc.set(REQUIRED_POWER_KEY, RebarSerializers.DOUBLE, requiredPower)

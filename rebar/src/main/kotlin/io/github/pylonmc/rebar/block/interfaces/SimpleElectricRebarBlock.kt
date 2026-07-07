@@ -1,9 +1,6 @@
 package io.github.pylonmc.rebar.block.interfaces
 
-import io.github.pylonmc.rebar.electricity.nodes.ElectricConnectorNode
-import io.github.pylonmc.rebar.electricity.nodes.ElectricConsumerNode
-import io.github.pylonmc.rebar.electricity.nodes.ElectricNode
-import io.github.pylonmc.rebar.electricity.nodes.ElectricProducerNode
+import io.github.pylonmc.rebar.electricity.nodes.*
 import io.github.pylonmc.rebar.util.position.position
 import org.bukkit.block.BlockFace
 import org.jetbrains.annotations.ApiStatus
@@ -26,23 +23,28 @@ interface SimpleElectricRebarBlock : ElectricRebarBlock {
      * If you wish to customize the port further, create an [ElectricNode] and call [addElectricPort] directly instead.
      */
     @ApiStatus.NonExtendable
-    fun createSimpleElectricPort(type: NodeType, face: BlockFace, radius: Double) {
+    fun createSimpleElectricPort(type: ElectricNode.Type, face: BlockFace, radius: Double) {
         val node = when (type) {
-            NodeType.CONNECTOR -> ElectricConnectorNode(
+            ElectricNode.Type.CONNECTOR -> ElectricConnectorNode(
                 "connector_${electricNodes.count { it is ElectricConnectorNode }}",
                 block.position
             )
 
-            NodeType.PRODUCER -> ElectricProducerNode(
+            ElectricNode.Type.PRODUCER -> ElectricProducerNode(
                 "producer_${electricNodes.count { it is ElectricProducerNode }}",
                 block.position,
                 0.0
             )
 
-            NodeType.CONSUMER -> ElectricConsumerNode(
+            ElectricNode.Type.CONSUMER -> ElectricConsumerNode(
                 "consumer_${electricNodes.count { it is ElectricConsumerNode }}",
                 block.position,
                 0.0
+            )
+
+            ElectricNode.Type.ACCEPTOR -> ElectricAcceptorNode(
+                "acceptor_${electricNodes.count { it is ElectricAcceptorNode }}",
+                block.position,
             )
         }
         addElectricPort(ElectricRebarBlock.ElectricPort(node, face, radius = radius))
@@ -51,7 +53,7 @@ interface SimpleElectricRebarBlock : ElectricRebarBlock {
      * Creates a port of the given [type], on the given [face]
      */
     @ApiStatus.NonExtendable
-    fun createSimpleElectricPort(type: NodeType, face: BlockFace) = createSimpleElectricPort(type, face, 0.5)
+    fun createSimpleElectricPort(type: ElectricNode.Type, face: BlockFace) = createSimpleElectricPort(type, face, 0.5)
 
     @ApiStatus.NonExtendable
     override fun <T : ElectricNode> addElectricNode(node: T): T {
@@ -69,7 +71,7 @@ interface SimpleElectricRebarBlock : ElectricRebarBlock {
          * @throws IllegalStateException if this block does not have a consumer node
          */
         get() {
-            val node = getElectricNode("consumer_0") as? ElectricConsumerNode
+            val node = getElectricNode<ElectricConsumerNode>("consumer_0")
                 ?: throw IllegalStateException("Block at ${block.position} does not have a consumer node")
             return node.requiredPower
         }
@@ -77,7 +79,7 @@ interface SimpleElectricRebarBlock : ElectricRebarBlock {
          * @throws IllegalStateException if this block does not have a consumer node
          */
         set(value) {
-            val node = getElectricNode("consumer_0") as? ElectricConsumerNode
+            val node = getElectricNode<ElectricConsumerNode>("consumer_0")
                 ?: throw IllegalStateException("Block at ${block.position} does not have a consumer node")
             node.requiredPower = value
         }
@@ -87,7 +89,7 @@ interface SimpleElectricRebarBlock : ElectricRebarBlock {
          * @throws IllegalStateException if this block does not have a consumer node
          */
         get() {
-            val node = getElectricNode("consumer_0") as? ElectricConsumerNode
+            val node = getElectricNode<ElectricConsumerNode>("consumer_0")
                 ?: throw IllegalStateException("Block at ${block.position} does not have a consumer node")
             return node.isPowered
         }
@@ -97,7 +99,7 @@ interface SimpleElectricRebarBlock : ElectricRebarBlock {
          * @throws IllegalStateException if this block does not have a producer node
          */
         get() {
-            val node = getElectricNode("producer_0") as? ElectricProducerNode
+            val node = getElectricNode<ElectricProducerNode>("producer_0")
                 ?: throw IllegalStateException("Block at ${block.position} does not have a producer node")
             return node.power
         }
@@ -105,14 +107,8 @@ interface SimpleElectricRebarBlock : ElectricRebarBlock {
          * @throws IllegalStateException if this block does not have a producer node
          */
         set(value) {
-            val node = getElectricNode("producer_0") as? ElectricProducerNode
+            val node = getElectricNode<ElectricProducerNode>("producer_0")
                 ?: throw IllegalStateException("Block at ${block.position} does not have a producer node")
             node.power = value
         }
-
-    enum class NodeType {
-        CONNECTOR,
-        PRODUCER,
-        CONSUMER
-    }
 }

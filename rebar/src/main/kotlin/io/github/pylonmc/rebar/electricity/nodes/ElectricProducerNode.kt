@@ -24,6 +24,8 @@ class ElectricProducerNode private constructor(
         priority: Int = 0
     ) : this(UUID.randomUUID(), name, block, mutableSetOf(), power, priority)
 
+    override val type = Type.PRODUCER
+
     /**
      * The amount of power that this producer produces, measured in watts.
      */

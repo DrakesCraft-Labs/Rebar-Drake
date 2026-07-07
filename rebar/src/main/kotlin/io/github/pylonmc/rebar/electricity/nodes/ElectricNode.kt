@@ -31,6 +31,8 @@ sealed class ElectricNode(
      */
     val network: ElectricNetwork get() = ElectricityManager.getNodeNetwork(this)
 
+    abstract val type: Type
+
     protected var onConnect = ConnectDisconnectHandler { _, _ -> }
     protected var onDisconnect = ConnectDisconnectHandler { _, _ -> }
 
@@ -117,6 +119,7 @@ sealed class ElectricNode(
     companion object {
 
         private val TYPE_KEY = rebarKey("type")
+        private val TYPE_TYPE = RebarSerializers.ENUM.enumTypeFrom<Type>()
         private val ID_KEY = rebarKey("id")
         private val NAME_KEY = rebarKey("name")
         private val BLOCK_KEY = rebarKey("block")
@@ -134,14 +137,7 @@ sealed class ElectricNode(
             ): PersistentDataContainer {
                 val pdc = context.newPersistentDataContainer()
 
-                val type = when (complex) {
-                    is ElectricProducerNode -> "producer"
-                    is ElectricConsumerNode -> "consumer"
-                    is ElectricConnectorNode -> "connector"
-                    is ElectricAcceptorNode -> "acceptor"
-                }
-                pdc.set(TYPE_KEY, RebarSerializers.STRING, type)
-
+                pdc.set(TYPE_KEY, TYPE_TYPE, complex.type)
                 pdc.set(ID_KEY, RebarSerializers.UUID, complex.id)
                 pdc.set(NAME_KEY, RebarSerializers.STRING, complex.name)
                 pdc.set(BLOCK_KEY, RebarSerializers.BLOCK_POSITION, complex.block)
@@ -161,14 +157,20 @@ sealed class ElectricNode(
                 val block = primitive.get(BLOCK_KEY, RebarSerializers.BLOCK_POSITION)!!
                 val connections = primitive.get(CONNECTIONS_KEY, CONNECTIONS_TYPE)!!.toMutableSet()
 
-                return when (primitive.get(TYPE_KEY, RebarSerializers.STRING)!!) {
-                    "producer" -> ElectricProducerNode.deserialize(id, name, block, connections, primitive)
-                    "consumer" -> ElectricConsumerNode.deserialize(id, name, block, connections, primitive)
-                    "connector" -> ElectricConnectorNode.deserialize(id, name, block, connections)
-                    "acceptor" -> ElectricAcceptorNode.deserialize(id, name, block, connections)
-                    else -> throw AssertionError()
+                return when (primitive.get(TYPE_KEY, TYPE_TYPE)!!) {
+                    Type.PRODUCER -> ElectricProducerNode.deserialize(id, name, block, connections, primitive)
+                    Type.CONSUMER -> ElectricConsumerNode.deserialize(id, name, block, connections, primitive)
+                    Type.CONNECTOR -> ElectricConnectorNode.deserialize(id, name, block, connections)
+                    Type.ACCEPTOR -> ElectricAcceptorNode.deserialize(id, name, block, connections)
                 }
             }
         }
+    }
+
+    enum class Type {
+        CONNECTOR,
+        PRODUCER,
+        CONSUMER,
+        ACCEPTOR
     }
 }

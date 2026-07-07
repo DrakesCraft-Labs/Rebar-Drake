@@ -16,6 +16,8 @@ class ElectricConnectorNode private constructor(
         block: BlockPosition
     ) : this(UUID.randomUUID(), name, block, mutableSetOf())
 
+    override val type = Type.CONNECTOR
+
     override fun serialize(pdc: PersistentDataContainer) {
     }
 
