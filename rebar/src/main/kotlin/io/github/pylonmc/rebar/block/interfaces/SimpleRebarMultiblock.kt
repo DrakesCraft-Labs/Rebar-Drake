@@ -25,7 +25,6 @@ import org.jetbrains.annotations.ApiStatus
 import org.jetbrains.annotations.MustBeInvokedByOverriders
 import org.joml.Vector3i
 import java.util.*
-import kotlin.collections.iterator
 import kotlin.math.abs
 import kotlin.math.min
 
@@ -131,8 +130,7 @@ interface SimpleRebarMultiblock : RebarMultiblock, GhostBlockHolderRebarBlock, E
             )
 
             @JvmStatic
-            fun of(vararg blockDatas: BlockData) =
-                                                                                      MultiblockComponent(
+            fun of(vararg blockDatas: BlockData) = MultiblockComponent(
                 blockDatas.toList(), listOf()
             )
 
