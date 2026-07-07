@@ -1,5 +1,11 @@
 package io.github.pylonmc.rebar.processor
 
+import org.jetbrains.annotations.ApiStatus
+
+/**
+ * Unfinished, do not use
+ */
+@ApiStatus.Experimental
 class RebarProcessor {
 
     internal class RebarProcess(
