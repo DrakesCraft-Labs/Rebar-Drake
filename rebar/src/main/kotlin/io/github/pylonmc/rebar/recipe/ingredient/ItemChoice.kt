@@ -16,6 +16,7 @@ import io.github.pylonmc.rebar.util.overriddenDataTypes
 import io.papermc.paper.datacomponent.DataComponentType
 import org.bukkit.inventory.ItemStack
 import org.bukkit.inventory.RecipeChoice
+import org.jetbrains.annotations.Contract
 import java.util.function.Predicate
 
 
@@ -42,6 +43,7 @@ class ItemChoice internal constructor(
         fun matches(slot: LogisticSlot) = matches(slot.getItemStack())
     }
 
+    @Contract("null -> false")
     fun matchesIgnoringAmount(stack: ItemStack?)
             = stack != null && internalChoices.any { it.matches(stack) }
 
@@ -49,6 +51,7 @@ class ItemChoice internal constructor(
         internalChoices.any { choice -> choice.matches(stack) }
     } ?: false
 
+    @Contract("null -> false")
     fun matches(stack: ItemStack?)
             = stack != null && stack.amount >= amount && matchesIgnoringAmount(stack)
 
