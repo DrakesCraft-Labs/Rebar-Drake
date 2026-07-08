@@ -21,6 +21,7 @@ import io.github.pylonmc.rebar.nms.NmsAccessor
 import io.github.pylonmc.rebar.registry.RebarRegistry
 import io.github.pylonmc.rebar.util.IMMEDIATE_FACES
 import io.github.pylonmc.rebar.util.editBlockData
+import io.github.pylonmc.rebar.util.getBlockData
 import io.github.pylonmc.rebar.util.isChunkLoaded
 import io.github.pylonmc.rebar.util.position.BlockPosition
 import io.github.pylonmc.rebar.util.position.position
@@ -142,10 +143,12 @@ open class RebarBlock private constructor(val block: Block) : WailaSupplier, Key
      */
     open fun postInitialise() {}
 
+    fun getBlockData() = getBlockData(BlockData::class.java)
+
+    fun <D : BlockData> getBlockData(dataType: Class<D>) = block.getBlockData(dataType)
+
     @JvmOverloads
-    fun editBlockData(editor: Consumer<BlockData>, applyPhysics: Boolean = true) {
-        block.editBlockData(editor, applyPhysics)
-    }
+    fun editBlockData(editor: Consumer<BlockData>, applyPhysics: Boolean = true) = editBlockData(BlockData::class.java, editor, applyPhysics)
 
     @JvmOverloads
     fun <D : BlockData> editBlockData(dataType: Class<D>, editor: Consumer<D>, applyPhysics: Boolean = true) {

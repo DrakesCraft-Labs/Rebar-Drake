@@ -3,6 +3,7 @@
 
 package io.github.pylonmc.rebar.util
 
+import com.google.common.base.Preconditions
 import io.github.pylonmc.rebar.Rebar
 import io.github.pylonmc.rebar.addon.RebarAddon
 import io.github.pylonmc.rebar.block.BlockListener
@@ -906,15 +907,19 @@ fun VirtualInventory.unsafeSubtract(slot: Int, amount: Int) {
 }
 
 @JvmOverloads
-fun Block.editBlockData(editor: Consumer<BlockData>, applyPhysics: Boolean = true) {
-    editBlockData(BlockData::class.java, editor, applyPhysics)
-}
+fun Block.editBlockData(editor: Consumer<BlockData>, applyPhysics: Boolean = true) = editBlockData(BlockData::class.java, editor, applyPhysics)
 
 @JvmOverloads
 fun <D: BlockData> Block.editBlockData(dataType: Class<D>, editor: Consumer<D>, applyPhysics: Boolean = true) {
-    val blockData = this.blockData
-    editor.accept(dataType.cast(blockData))
+    val blockData = getBlockData(dataType)
+    editor.accept(blockData)
     setBlockData(blockData, applyPhysics)
+}
+
+fun <D: BlockData> Block.getBlockData(dataType: Class<D>): D {
+    val blockData = this.blockData
+    Preconditions.checkState(dataType.isInstance(blockData))
+    return dataType.cast(this.blockData)
 }
 
 fun ItemStack.isBroken(): Boolean {
