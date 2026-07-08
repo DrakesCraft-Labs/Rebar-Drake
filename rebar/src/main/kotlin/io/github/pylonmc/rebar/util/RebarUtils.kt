@@ -931,7 +931,7 @@ fun ItemStack.isBroken(): Boolean {
 /**
  * This is used commonly when you are manipulating an [ItemStack] before it has been damaged, but when you know it
  * will be damaged,and you want to check if it will break after the damage is applied.
- * 
+ *
  * @return if this [ItemStack] has only 1 durability left.
  */
 fun ItemStack.hasOneDurabilityLeft(): Boolean {
