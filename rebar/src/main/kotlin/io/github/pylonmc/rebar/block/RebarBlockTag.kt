@@ -5,13 +5,13 @@ import org.bukkit.NamespacedKey
 import org.bukkit.Tag
 import org.bukkit.block.data.BlockData
 
-class RebarBlockTag(private val key: NamespacedKey, items: Set<BlockTypeWrapper>) : Tag<BlockTypeWrapper> {
+class RebarBlockTag(private val key: NamespacedKey, blocks: Set<BlockTypeWrapper>) : Tag<BlockTypeWrapper> {
     constructor(key: NamespacedKey, vararg materials: Material) : this(key, materials.map { BlockTypeWrapper(it) }.toSet())
 
-    private val items = items.toMutableSet()
+    private val blocks = blocks.toMutableSet()
 
     fun add(wrapper: BlockTypeWrapper) {
-        items.add(wrapper)
+        blocks.add(wrapper)
     }
 
     fun add(material: Material) = add(BlockTypeWrapper(material))
@@ -22,7 +22,7 @@ class RebarBlockTag(private val key: NamespacedKey, items: Set<BlockTypeWrapper>
 
     fun add(key: NamespacedKey) = add(BlockTypeWrapper(key))
 
-    override fun isTagged(block: BlockTypeWrapper): Boolean = block in items
-    override fun getValues(): Set<BlockTypeWrapper> = items.toSet()
+    override fun isTagged(block: BlockTypeWrapper): Boolean = block in blocks
+    override fun getValues(): Set<BlockTypeWrapper> = blocks.toSet()
     override fun getKey(): NamespacedKey = key
 }

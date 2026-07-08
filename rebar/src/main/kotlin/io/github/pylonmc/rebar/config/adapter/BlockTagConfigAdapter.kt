@@ -52,29 +52,22 @@ object BlockTagConfigAdapter : ConfigAdapter<Tag<BlockTypeWrapper>> {
         throw IllegalArgumentException("Block tag not found: $value")
     }
 
-    private val paperRegistry = object : HashMap<NamespacedKey, Tag<BlockTypeWrapper>>() {
-        init {
-            for (entry in MaterialTags::class.java.declaredFields) {
-                if (entry.modifiers and Modifier.STATIC == 0) continue
+    private val paperRegistry = buildMap {
+        for (entry in MaterialTags::class.java.declaredFields) {
+            if (entry.modifiers and Modifier.STATIC == 0) continue
 
-                val value = entry.get(null) ?: continue
-                if (value !is Tag<*>) continue
+            val value = entry.get(null) ?: continue
+            if (value !is Tag<*>) continue
 
-                val content = value.values.first()
-                if (content !is Material) continue
+            val content = value.values.first()
+            if (content !is Material) continue
 
-                @Suppress("UNCHECKED_CAST")
-                val realTag = value as Tag<Material>
+            @Suppress("UNCHECKED_CAST")
+            val realTag = value as Tag<Material>
 
-                if (realTag.values.any { !it.isBlock }) continue
+            if (realTag.values.any { !it.isBlock }) continue
 
-                this[realTag.key] = realTag.toBlockTypeTag()
-            }
-        }
-
-        override operator fun get(key: NamespacedKey): Tag<BlockTypeWrapper>? {
-            if (key.namespace != "paper") return null
-            return super[key]
+            this[realTag.key] = realTag.toBlockTypeTag()
         }
     }
 }

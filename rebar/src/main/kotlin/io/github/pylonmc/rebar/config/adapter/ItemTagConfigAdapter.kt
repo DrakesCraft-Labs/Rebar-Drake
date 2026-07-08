@@ -52,29 +52,22 @@ object ItemTagConfigAdapter : ConfigAdapter<Tag<ItemTypeWrapper>> {
         throw IllegalArgumentException("Item tag not found: $value")
     }
 
-    private val paperRegistry = object : HashMap<NamespacedKey, Tag<ItemTypeWrapper>>() {
-        init {
-            for (entry in MaterialTags::class.java.declaredFields) {
-                if (entry.modifiers and Modifier.STATIC == 0) continue
+    private val paperRegistry = buildMap {
+        for (entry in MaterialTags::class.java.declaredFields) {
+            if (entry.modifiers and Modifier.STATIC == 0) continue
 
-                val value = entry.get(null) ?: continue
-                if (value !is Tag<*>) continue
+            val value = entry.get(null) ?: continue
+            if (value !is Tag<*>) continue
 
-                val content = value.values.first()
-                if (content !is Material) continue
+            val content = value.values.first()
+            if (content !is Material) continue
 
-                @Suppress("UNCHECKED_CAST")
-                val realTag = value as Tag<Material>
+            @Suppress("UNCHECKED_CAST")
+            val realTag = value as Tag<Material>
 
-                if (realTag.values.any { !it.isItem }) continue
+            if (realTag.values.any { !it.isItem }) continue
 
-                this[realTag.key] = realTag.toItemTypeTag()
-            }
-        }
-
-        override operator fun get(key: NamespacedKey): Tag<ItemTypeWrapper>? {
-            if (key.namespace != "paper") return null
-            return super[key]
+            this[realTag.key] = realTag.toItemTypeTag()
         }
     }
 }
