@@ -15,7 +15,7 @@ item:
       <arrow> You can open the guide without this item with <insn>/rb</insn>
 
   phantom_block:
-    name: "<red>Phantom Block (%block%)"
+    name: "<red>Phantom Block"
 
   debug_waxed_weathered_cut_copper_stairs:
     name: "<red>Debug Waxed Weathered Cut Copper Stairs"
@@ -23,18 +23,16 @@ item:
       <arrow> <insn>Shift left click</insn> a block/entity to remove it
       <arrow> <insn>Right click</insn> a block/entity to view its Rebar data
 
-  fluid_pipe_intersection_marker:
-    waila: "%pipe%"
-
-  fluid_pipe_section_marker:
-    waila: "%pipe%"
-
 fluid:
+  none: "<#ce9d98>None"
   temperature:
     display-text: "<arrow> <attr>Temperature:</attr> %temperature%"
     cold: "<#1cb3d8>cold"
     normal: "<#c9d81c>normal"
     hot: "<#d81c1c>hot"
+
+waila:
+  error: "<red>WAILA error - check console"
 
 message:
   debug:
@@ -65,6 +63,9 @@ message:
     unlocked: "<green>You have discovered %research%"
     click_to_research: "<green>Click to research (%points% points)"
 
+  waila:
+    type-disabled: "<red>This server no longer permits the your previously set %type% WAILA display type, it has been reset to default"
+
   command:
     error:
       no_permission: "<red>You do not have permission to use this command"
@@ -94,17 +95,25 @@ message:
         set: "Set %player%'s research points to %points%"
         added: "Added %points% research points to %player%"
         removed: "Removed %points% research points from %player%"
-        query: "%player% has %points% research points"
+        get: "%player% has %points% research points"
     exposerecipe:
       not-configurable: "<red>This recipe type is not configurable"
       warning: "<yellow>Warning: exposing recipe configs will keep them from updating automatically. Delete %file% to revert"
-    finishmultiblock:
-      failed: "<red>You are not looking at a multiblock"
-      success: "Finished the multiblock"
-    forceload: "Force loaded chunk at %x%, %z%"
+    fillmultiblock:
+      not-looking: "<red>You are not looking at a multiblock"
+      failed: "No blocks were filled"
+      success: "Filled %filled%/%total% blocks"
+    versions: |-
+      <gray>This server uses the following setup of Rebar:</gray>
+      <green>%server_implementation% <dark_green>%server_version%</dark_green> <gray>(API: %api_version%)</gray>
+      <green>Rebar <dark_green>%rebar_version%</dark_green>
+      <green>Java <dark_green>%java_version%</dark_green>
+      
+      <gray>Installed Addons:</gray> <dark_gray>(%addon_count%)</dark_gray>
+      %addon_list%
 
-  waila:
-    type-disabled: "<red>This server no longer permits the your previously set %type% WAILA display type, it has been reset to default"
+    reloadlang:
+      success: "<green>Language entries reloaded"
 
 gui:
   scroll:
@@ -126,15 +135,18 @@ guide:
   button:
     back:
       name: "<white>Back"
+      hints: |-
+        <guidehint><guidearrow> <guideinsn>Shift left click</guideinsn> to go to the main menu watermelon</guidehint>
     item-recipes: "<white>Recipe"
     machine-recipes: "<white>Recipes made with this machine"
     search-specifiers:
       name: "Search Specifiers"
       lore: |-
-        <guidearrow> By default, searches through item names greedily ("iron ingot" searches for exactly "iron ingot" not "iron" and "ingot")
+        <guidearrow> By default, words will search in item names
         <guidearrow> Prefix <light_purple>@</light_purple> to search by <light_purple>addon</light_purple> id or display name (e.g. "pylon")
         <guidearrow> Prefix <aqua>$</aqua> to search in <aqua>lore</aqua>
         <guidearrow> Prefixed searches only apply to the word directly after the prefix
+        <guidearrow> Spaces are treated as 'and' ("iron ingot" searches for "iron" and "ingot")
         <guidearrow> Example: <light_purple>@pylon <white>iron <aqua>$temperature <white>slurry
     research:
       cost:
@@ -144,13 +156,11 @@ guide:
       hints:
         researched: |-
           
-          <u>Hints</u>
-          <guidearrow> <guideinsn>Right click</guideinsn> to see unlocked items
+          <guidehint><guidearrow> <guideinsn>Right click</guideinsn> to see unlocked items</guidehint>
         unresearched: |-
           
-          <u>Hints</u>
-          <guidearrow> <guideinsn>Left click</guideinsn> to research
-          <guidearrow> <guideinsn>Right click</guideinsn> to see unlocked items
+          <guidegint><guidearrow> <guideinsn>Left click</guideinsn> to research</guidehint>
+          <guidehint><guidearrow> <guideinsn>Right click</guideinsn> to see unlocked items</guidehint>
       unlocks-title: |-
       
         <u>Unlocks</u>
@@ -169,8 +179,7 @@ guide:
       hints:
         unresearched: |-
           
-          <u>Hints</u>
-          <guidearrow> <guideinsn>Shift left click</guideinsn> to research
+          <guidehint><guidearrow> <guideinsn>Shift left click</guideinsn> to research</guidehint>
       error: "<red>Item failed to load"
       amount: "%name%: <gray>%amount%%breakdown%"
       amount-breakdown: " (%stacks%x%stack-size% + %remainder%)"
@@ -352,11 +361,29 @@ guide:
       enabled:
         name: "<white>Guide Hints: <green>Enabled <dark_gray>(Click to toggle)"
         lore: |-
-          <guidearrow> Whether to show <guideinsn>hints</guideinsn> in the guide
+          <guidearrow> Whether to show <guidehint>guide hints</guidehint>
       disabled:
         name: "<white>Guide Hints: <red>Disabled <dark_gray>(Click to toggle)"
         lore: |-
-          <guidearrow> Whether to show <guideinsn>hints</guideinsn> in the guide
+          <guidearrow> Whether to show <guidehint>hints</guidehint>
+    toggle-guide-sounds:
+      enabled:
+        name: "<white>Guide Sounds: <green>Enabled <dark_gray>(Click to toggle)"
+        lore: |-
+          <guidearrow> Whether to play sounds in the guide
+      disabled:
+        name: "<white>Guide Sounds: <red>Disabled <dark_gray>(Click to toggle)"
+        lore: |-
+          <guidearrow> Whether to play sounds in the guide
+    toggle-story-text:
+      enabled:
+        name: "<white>Story text: <green>Enabled <dark_gray>(Click to toggle)"
+        lore: |-
+          <guidearrow> Whether to show <story>story text</story>
+      disabled:
+        name: "<white>Story text: <red>Disabled <dark_gray>(Click to toggle)"
+        lore: |-
+          <guidearrow> Whether to show <story>story text</story>
     info:
       discord:
         name: "<white>Discord"
@@ -377,7 +404,7 @@ guide:
         name: "<white>Guide Cheat Controls"
         lore: |-
           <guidearrow> In the rebar guide as an admin there are a few cheat controls
-          <guidearrow> <guideinsn>Press Q</guideinsn> on a Rebar Item to cheat in one item
+          <guidearrow> <guideinsn>Press</guideinsn> <guideinsn><key:key.drop></guideinsn> on a Rebar Item to cheat in one item
           <guidearrow> <guideinsn>Middle click</guideinsn> a Rebar Item to cheat in a stack
       rebar:
         name: "<white>What is Rebar?"
@@ -551,6 +578,10 @@ unit:
     singular: "bucket per second"
     plural: "buckets per second"
     abbr: "B/s"
+  buckets_per_item:
+    singular: "bucket per item"
+    plural: "buckets per item"
+    abbr: "B/item"
   days:
     singular: "day"
     plural: "days"

@@ -23,6 +23,7 @@ open class BlockDisplayBuilder() {
     protected var interpolationDuration: Int? = null
     protected var displayWidth: Float? = null
     protected var displayHeight: Float? = null
+    protected var persistent: Boolean? = null
 
     constructor(other: BlockDisplayBuilder): this() {
         this.material = other.material
@@ -35,6 +36,7 @@ open class BlockDisplayBuilder() {
         this.interpolationDuration = other.interpolationDuration
         this.displayWidth = other.displayWidth
         this.displayHeight = other.displayHeight
+        this.persistent = other.persistent
     }
 
     fun material(material: Material?): BlockDisplayBuilder {
@@ -45,6 +47,7 @@ open class BlockDisplayBuilder() {
     fun blockData(blockData: BlockData?): BlockDisplayBuilder = apply { this.blockData = blockData }
     fun transformation(transformation: Matrix4f?): BlockDisplayBuilder = apply { this.transformation = transformation }
     fun transformation(builder: TransformBuilder): BlockDisplayBuilder = apply { this.transformation = builder.buildForBlockDisplay() }
+    fun transformation(builder: (TransformBuilder) -> Unit) = transformation(TransformBuilder().apply(builder).build())
     fun brightness(brightness: Brightness): BlockDisplayBuilder = apply { this.brightness = brightness }
     fun brightness(brightness: Int): BlockDisplayBuilder = brightness(Brightness(0, brightness))
     fun glow(glowColor: Color?): BlockDisplayBuilder = apply { this.glowColor = glowColor }
@@ -53,6 +56,7 @@ open class BlockDisplayBuilder() {
     fun interpolationDuration(interpolationDuration: Int): BlockDisplayBuilder = apply { this.interpolationDuration = interpolationDuration }
     fun displayWidth(displayWidth: Float): BlockDisplayBuilder = apply { this.displayWidth = displayWidth }
     fun displayHeight(displayHeight: Float): BlockDisplayBuilder = apply { this.displayHeight = displayHeight }
+    fun persistent(persistent: Boolean): BlockDisplayBuilder = apply { this.persistent = persistent }
 
     open fun build(location: Location): BlockDisplay {
         val finalLocation = location.clone()
@@ -92,6 +96,9 @@ open class BlockDisplayBuilder() {
         }
         if (displayHeight != null) {
             display.displayHeight = displayHeight!!
+        }
+        if (persistent != null) {
+            display.isPersistent = persistent!!
         }
     }
 }

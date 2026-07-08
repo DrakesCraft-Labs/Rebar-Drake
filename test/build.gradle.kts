@@ -4,8 +4,8 @@ plugins {
     java
     id("com.gradleup.shadow")
     id("net.minecrell.plugin-yml.bukkit")
-    id("xyz.jpenilla.run-paper") version "2.3.0"
-    id("io.freefair.lombok") version "8.13.1"
+    id("xyz.jpenilla.run-paper") version "3.0.2"
+    id("io.freefair.lombok") version "9.5.0"
 }
 
 version = "TEST"
@@ -18,13 +18,13 @@ repositories {
 val minecraftVersion = property("minecraft.version").toString()
 
 dependencies {
-    compileOnly("io.papermc.paper:paper-api:$minecraftVersion-R0.1-SNAPSHOT")
+    compileOnly("io.papermc.paper:paper-api:$minecraftVersion.build.+")
     compileOnly(project(":rebar"))
     implementation("org.assertj:assertj-core:3.27.2")
 }
 
 java {
-    toolchain.languageVersion = JavaLanguageVersion.of(21)
+    toolchain.languageVersion = JavaLanguageVersion.of(25)
 }
 
 bukkit {
@@ -51,7 +51,7 @@ tasks.runServer {
         val archive = project(":rebar").tasks.shadowJar.map { it.archiveFile }.get().get().asFile
         archive.copyTo(pluginFolder.resolve(archive.name), overwrite = true)
     }
-    maxHeapSize = "4G"
+    maxHeapSize = "2G"
     minecraftVersion(minecraftVersion)
     doLast {
         runFolder.resolve("gametests").deleteRecursively()

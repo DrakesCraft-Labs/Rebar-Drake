@@ -3,29 +3,32 @@ package io.github.pylonmc.rebar.content.fluid
 import io.github.pylonmc.rebar.datatypes.RebarSerializers
 import io.github.pylonmc.rebar.entity.EntityStorage
 import io.github.pylonmc.rebar.entity.RebarEntity
-import io.github.pylonmc.rebar.entity.base.RebarDeathEntity
 import io.github.pylonmc.rebar.entity.display.ItemDisplayBuilder
 import io.github.pylonmc.rebar.entity.display.transform.TransformBuilder
-import io.github.pylonmc.rebar.event.RebarEntityDeathEvent
+import io.github.pylonmc.rebar.entity.interfaces.RemoveRebarEntityHandler
 import io.github.pylonmc.rebar.fluid.FluidManager
 import io.github.pylonmc.rebar.fluid.FluidPointType
 import io.github.pylonmc.rebar.fluid.VirtualFluidPoint
 import io.github.pylonmc.rebar.item.builder.ItemStackBuilder
 import io.github.pylonmc.rebar.util.rebarKey
 import io.github.pylonmc.rebar.util.setNullable
+import io.papermc.paper.datacomponent.DataComponentTypes
+import io.papermc.paper.datacomponent.item.CustomModelData
+import jdk.jfr.internal.StringPool.addString
 import org.bukkit.block.Block
 import org.bukkit.block.BlockFace
 import org.bukkit.entity.ItemDisplay
 import org.bukkit.event.EventPriority
+import org.bukkit.event.entity.EntityRemoveEvent
 import org.bukkit.persistence.PersistentDataContainer
-import java.util.UUID
+import java.util.*
 import kotlin.math.pow
 import kotlin.math.sqrt
 
 /**
  * A 'endpoint display' is one of the red/green displays that indicates a block's fluid input/output.
  */
-class FluidEndpointDisplay : RebarEntity<ItemDisplay>, RebarDeathEntity, FluidPointDisplay {
+class FluidEndpointDisplay : RebarEntity<ItemDisplay>, RemoveRebarEntityHandler, FluidPointDisplay {
     override val point: VirtualFluidPoint
     var connectedPipeDisplay: UUID?
     override val connectedPipeDisplays: Set<UUID>
@@ -66,14 +69,25 @@ class FluidEndpointDisplay : RebarEntity<ItemDisplay>, RebarDeathEntity, FluidPo
 
     override fun connectPipeDisplay(uuid: UUID) {
         this.connectedPipeDisplay = uuid
+        updateItemDisplay()
     }
 
     override fun disconnectPipeDisplay(uuid: UUID) {
         check(this.connectedPipeDisplay == uuid) { "$uuid is not connected" }
         this.connectedPipeDisplay = null
+        updateItemDisplay()
     }
 
-    override fun onDeath(event: RebarEntityDeathEvent, priority: EventPriority) {
+    @Suppress("UnstableApiUsage")
+    fun updateItemDisplay() {
+        this.entity.setItemStack(this.entity.itemStack.apply {
+            setData(DataComponentTypes.CUSTOM_MODEL_DATA, CustomModelData.customModelData()
+                .addString("fluid_point_${point.type.name.lowercase()}:${pipeDisplay?.pipe?.key ?: "none"}")
+                .addString("face=${face.oppositeFace.name.lowercase()}"))
+        })
+    }
+
+    override fun onRemoved(event: EntityRemoveEvent, priority: EventPriority) {
         pipeDisplay?.delete(null, null)
         FluidManager.remove(point)
     }
@@ -102,8 +116,10 @@ class FluidEndpointDisplay : RebarEntity<ItemDisplay>, RebarDeathEntity, FluidPo
                     .scale(POINT_SIZE)
                 )
                 .itemStack(ItemStackBuilder.of(type.material)
-                    .addCustomModelDataString("fluid_point_display:${type.name.lowercase()}")
+                    .addCustomModelDataString("fluid_point_${type.name.lowercase()}:none")
+                    .addCustomModelDataString("face=${face.oppositeFace.name.lowercase()}")
                 )
+                .itemDisplayTransform(ItemDisplay.ItemDisplayTransform.HEAD)
                 // add a little bit to ensure the point is not obscured by the block itself
                 .build(block.location.toCenterLocation().add(face.direction.multiply(radius + 0.001)))
         }

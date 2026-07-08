@@ -1,7 +1,6 @@
 package io.github.pylonmc.rebar.block
 
 import io.github.pylonmc.rebar.block.context.BlockCreateContext
-import io.github.pylonmc.rebar.i18n.RebarTranslator.Companion.translator
 import io.github.pylonmc.rebar.util.findConstructorMatching
 import io.github.pylonmc.rebar.util.getAddon
 import io.github.pylonmc.rebar.util.position.BlockPosition
@@ -34,33 +33,35 @@ class RebarBlockSchema(
 
     val nameTranslationKey: TranslatableComponent
     val loreTranslationKey: TranslatableComponent
-    val defaultWailaTranslationKey: TranslatableComponent
 
     init {
         val prefix = "${key.namespace}.item.${key.key}"
         nameTranslationKey = Component.translatable("$prefix.name")
         loreTranslationKey = Component.translatable("$prefix.lore")
         val default = "$prefix.waila"
-        defaultWailaTranslationKey = if (addon.translator.languages.any { addon.translator.canTranslate(default, it) }) {
-            Component.translatable(default)
-        } else {
-            nameTranslationKey
-        }
     }
 
-    private val createConstructor: MethodHandle = blockClass.findConstructorMatching(
-        Block::class.java,
-        BlockCreateContext::class.java
-    ) ?: throw NoSuchMethodException(
-        "Block '$key' ($blockClass) is missing a create constructor (${javaClass.simpleName}, Block, BlockCreateContext)"
-    )
+    private val createConstructor: MethodHandle = try {
+        blockClass.findConstructorMatching(
+            Block::class.java,
+            BlockCreateContext::class.java
+        ) ?: throw NoSuchMethodException(
+            "Block '$key' ($blockClass) is missing a create constructor (${javaClass.simpleName}, Block, BlockCreateContext)"
+        )
+    } catch (e: Exception) {
+        throw RuntimeException("Error while finding the create constructor for $key", e)
+    }
 
-    private val loadConstructor: MethodHandle = blockClass.findConstructorMatching(
-        Block::class.java,
-        PersistentDataContainer::class.java
-    ) ?: throw NoSuchMethodException(
-        "Block '$key' ($blockClass) is missing a load constructor (${javaClass.simpleName}, Block, PersistentDataContainer)"
-    )
+    private val loadConstructor: MethodHandle = try{
+        blockClass.findConstructorMatching(
+            Block::class.java,
+            PersistentDataContainer::class.java
+        ) ?: throw NoSuchMethodException(
+            "Block '$key' ($blockClass) is missing a load constructor (${javaClass.simpleName}, Block, PersistentDataContainer)"
+        )
+    } catch (e: Exception) {
+        throw RuntimeException("Error while finding the load constructor for $key", e)
+    }
 
     @JvmSynthetic
     internal fun create(block: Block, context: BlockCreateContext): RebarBlock {
@@ -72,6 +73,10 @@ class RebarBlockSchema(
     internal fun load(block: Block, pdc: PersistentDataContainer): RebarBlock {
         schemaCache[block.position] = this
         return loadConstructor.invoke(block, pdc) as RebarBlock
+    }
+
+    fun <T> isType(clazz: Class<T>): Boolean {
+        return clazz.isAssignableFrom(blockClass)
     }
 
     override fun getKey(): NamespacedKey = key

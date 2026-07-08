@@ -10,10 +10,13 @@ import net.kyori.adventure.bossbar.BossBar
  */
 object RebarConfig {
 
-    private val config = Config(Rebar, "config.yml")
+    private val config = ConfigSection.copyResource(Rebar, "config.yml")
 
     @JvmField
-    val REBAR_GUIDE_ON_FIRST_JOIN = config.getOrThrow("rebar-guide-on-first-join", ConfigAdapter.BOOLEAN)
+    val BYPASS_VERSION_CHECK = config.getOrThrow("bypass-version-check", ConfigAdapter.BOOLEAN)
+
+    @JvmField
+    val DEFAULT_LANGUAGE = config.getOrThrow("default-language", ConfigAdapter.LOCALE)
 
     @JvmField
     val DEFAULT_TICK_INTERVAL = config.getOrThrow("default-tick-interval", ConfigAdapter.INTEGER)
@@ -23,6 +26,12 @@ object RebarConfig {
 
     @JvmField
     val ALLOWED_ENTITY_ERRORS = config.getOrThrow("allowed-entity-errors", ConfigAdapter.INTEGER)
+
+    /**
+     * Mutable so that they can be disabled/enabled live for things like tests, etc.
+     */
+    @JvmField
+    var FULL_ERROR_STACK_TRACES = config.getOrThrow("full-error-stack-traces", ConfigAdapter.BOOLEAN)
 
     @JvmField
     val FLUID_TICK_INTERVAL = config.getOrThrow("fluid-tick-interval", ConfigAdapter.INTEGER)
@@ -60,6 +69,38 @@ object RebarConfig {
     @JvmField
     val CARGO_TRANSFER_RATE_MULTIPLIER = config.getOrThrow("cargo-transfer-rate-multiplier", ConfigAdapter.INTEGER)
 
+    @JvmField
+    val GHOST_BLOCK_TICK_INTERVAL = config.getOrThrow("ghost-block-tick-interval", ConfigAdapter.INTEGER)
+
+    object GuideConfig {
+
+        @JvmField
+        val GIVE_ON_FIRST_JOIN = config.getOrThrow("rebar-guide.give-on-first-join", ConfigAdapter.BOOLEAN)
+
+        @JvmField
+        val DISCORD_BUTTON = config.getOrThrow("rebar-guide.discord-button", ConfigAdapter.BOOLEAN)
+
+        @JvmField
+        val OPEN_SOUND = config.getOrThrow("rebar-guide.open-sound", ConfigAdapter.RANDOMIZED_SOUND)
+
+        @JvmField
+        val CLICK_BUTTON_SOUND = config.getOrThrow("rebar-guide.click-button-sound", ConfigAdapter.RANDOMIZED_SOUND)
+
+    }
+
+    object ConfettiCreeperConfig {
+
+        @JvmField
+        val CHANCE = config.getOrThrow("confetti-creeper.chance", ConfigAdapter.DOUBLE)
+
+        @JvmField
+        val AMOUNT = config.getOrThrow("confetti-creeper.confetti-amount", ConfigAdapter.INTEGER)
+
+        @JvmField
+        val LIFETIME = config.getOrThrow("confetti-creeper.confetti-lifetime", ConfigAdapter.INTEGER)
+
+    }
+
     object ResearchConfig {
 
         @JvmField
@@ -82,11 +123,22 @@ object RebarConfig {
     object WailaConfig {
 
         @JvmStatic
-        val ENABLED
-            get() = TICK_INTERVAL > 0 && ENABLED_TYPES.isNotEmpty()
+        val ENABLED = config.getOrThrow("waila.enabled", ConfigAdapter.BOOLEAN)
 
         @JvmField
-        val TICK_INTERVAL = config.getOrThrow("waila.tick-interval", ConfigAdapter.INTEGER)
+        val CONTENTS_TICK_INTERVAL = config.getOrThrow("waila.contents-tick-interval", ConfigAdapter.INTEGER)
+
+        @JvmField
+        val TARGET_TICK_INTERVAL = config.getOrThrow("waila.target-tick-interval", ConfigAdapter.INTEGER)
+
+        @JvmField
+        val STATIONARY_TARGET_TICK_INTERVAL_MULTIPLIER = config.getOrThrow("waila.stationary-target-tick-interval-multiplier", ConfigAdapter.INTEGER)
+
+        init {
+            check(CONTENTS_TICK_INTERVAL > 0) { "waila.content-tick-interval must be greater than zero" }
+            check(TARGET_TICK_INTERVAL > 0) { "waila.fast-target-tick-interval must be greater than zero" }
+            check(STATIONARY_TARGET_TICK_INTERVAL_MULTIPLIER > 0) { "waila.stationary-target-tick-interval-multiplier must be greater than zero" }
+        }
 
         @JvmField
         val ENABLED_TYPES = config.getOrThrow("waila.enabled-types", ConfigAdapter.LIST.from(ConfigAdapter.ENUM.from(Waila.Type::class.java)))
@@ -113,13 +165,6 @@ object RebarConfig {
                 throw IllegalStateException("Default bossbar overlay $overlay is not in the list of allowed overlays: $ALLOWED_BOSS_BAR_OVERLAYS")
             }
         }
-    }
-
-    object GuideConfig {
-
-        @JvmField
-        val DISCORD_BUTTON = config.getOrThrow("guide.discord-button", ConfigAdapter.BOOLEAN)
-
     }
 
     object ArmorTextureConfig {

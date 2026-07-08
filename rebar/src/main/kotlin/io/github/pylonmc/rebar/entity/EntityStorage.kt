@@ -1,24 +1,28 @@
 package io.github.pylonmc.rebar.entity
 
-import com.destroystokyo.paper.event.entity.EntityRemoveFromWorldEvent
 import io.github.pylonmc.rebar.Rebar
 import io.github.pylonmc.rebar.addon.RebarAddon
 import io.github.pylonmc.rebar.block.BlockStorage
 import io.github.pylonmc.rebar.config.RebarConfig
 import io.github.pylonmc.rebar.event.RebarEntityAddEvent
-import io.github.pylonmc.rebar.event.RebarEntityDeathEvent
 import io.github.pylonmc.rebar.event.RebarEntityLoadEvent
+import io.github.pylonmc.rebar.event.RebarEntityRemoveEvent
 import io.github.pylonmc.rebar.event.RebarEntityUnloadEvent
 import io.github.pylonmc.rebar.registry.RebarRegistry
 import io.github.pylonmc.rebar.util.isFromAddon
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
+import org.bukkit.Bukkit
 import org.bukkit.NamespacedKey
 import org.bukkit.entity.Entity
 import org.bukkit.event.EventHandler
+import org.bukkit.event.EventPriority
 import org.bukkit.event.Listener
+import org.bukkit.event.entity.EntityDeathEvent
+import org.bukkit.event.entity.EntityRemoveEvent
 import org.bukkit.event.world.EntitiesLoadEvent
+import org.bukkit.event.world.EntitiesUnloadEvent
 import java.util.UUID
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.locks.ReentrantReadWriteLock
@@ -37,16 +41,17 @@ object EntityStorage : Listener {
     private val entitiesByKey: MutableMap<NamespacedKey, MutableSet<RebarEntity<*>>> = ConcurrentHashMap()
     private val entityAutosaveTasks: MutableMap<UUID, Job> = ConcurrentHashMap()
     private val whenEntityLoadsTasks: MutableMap<UUID, MutableSet<Consumer<RebarEntity<*>>>> = ConcurrentHashMap()
+    private val whenVanillaEntityLoadsTasks: MutableMap<UUID, MutableSet<Consumer<Entity>>> = ConcurrentHashMap()
+
+    // Access to entities, entitiesById fields must be synchronized to prevent them
+    // briefly going out of sync
+    private val entityLock = ReentrantReadWriteLock()
 
     /**
      * All the loaded [RebarEntity]s
      */
     val loadedEntities: Collection<RebarEntity<*>>
-        get() = entities.values
-
-    // Access to entities, entitiesById fields must be synchronized to prevent them
-    // briefly going out of sync
-    private val entityLock = ReentrantReadWriteLock()
+        get() = lockEntityRead { entities.values.toSet() }
 
     /**
      * Returns the [RebarEntity] with this [uuid], or null if the entity does not exist or is not
@@ -61,8 +66,10 @@ object EntityStorage : Listener {
      * a Rebar entity.
      */
     @JvmStatic
-    fun get(entity: Entity): RebarEntity<*>?
-        = get(entity.uniqueId)
+    fun get(entity: Entity): RebarEntity<*>? {
+        // TODO: Re-evaluate if we should have a pdc check before locked map read
+        return get(entity.uniqueId)
+    }
 
     /**
      * Returns the [RebarEntity] with this [uuid], or null if the entity does not exist, is not
@@ -106,7 +113,7 @@ object EntityStorage : Listener {
     fun getByKey(key: NamespacedKey): Collection<RebarEntity<*>> =
         if (key in RebarRegistry.ENTITIES) {
             lockEntityRead {
-                entitiesByKey[key].orEmpty()
+                entitiesByKey[key].orEmpty().toSet()
             }
         } else {
             emptySet()
@@ -128,7 +135,6 @@ object EntityStorage : Listener {
                 consumer.accept(it)
             }
         }
-
     }
 
     /**
@@ -158,6 +164,52 @@ object EntityStorage : Listener {
     @JvmStatic
     inline fun <reified T> whenEntityLoads(uuid: UUID, crossinline consumer: (T) -> Unit)
             = whenEntityLoads(uuid, T::class.java) { t -> consumer(t) }
+
+    /**
+     * Schedules a task to run when the vanilla entity with id [uuid] is loaded, or runs the task immediately
+     * if the entity is already loaded.
+     *
+     * Useful for when you don't know whether a block or one of its associated entity will be loaded first.
+     */
+    @JvmStatic
+    fun whenVanillaEntityLoads(uuid: UUID, consumer: Consumer<Entity>) {
+        val entity = Bukkit.getEntity(uuid)
+        if (entity != null) {
+            consumer.accept(entity)
+        } else {
+            whenVanillaEntityLoadsTasks.getOrPut(uuid) { mutableSetOf() }.add {
+                consumer.accept(it)
+            }
+        }
+    }
+
+    /**
+     * Schedules a task to run when the vanilla entity with id [uuid] is loaded, or runs the task immediately
+     * if the entity is already loaded.
+     *
+     * Useful for when you don't know whether a block or one of its associated entity will be loaded first.
+     */
+    @JvmStatic
+    fun <T> whenVanillaEntityLoads(uuid: UUID, clazz: Class<T>, consumer: Consumer<T>) {
+        val entity = Bukkit.getEntity(uuid)
+        if (entity != null && clazz.isInstance(entity)) {
+            consumer.accept(clazz.cast(entity))
+        } else {
+            whenVanillaEntityLoadsTasks.getOrPut(uuid) { mutableSetOf() }.add {
+                consumer.accept(if (clazz.isInstance(it)) clazz.cast(it) else throw IllegalStateException("Entity $uuid was not of expected type ${clazz.simpleName}"))
+            }
+        }
+    }
+
+    /**
+     * Schedules a task to run when the vanilla entity with id [uuid] is loaded, or runs the task immediately
+     * if the entity is already loaded
+     *
+     * Useful for when you don't know whether a block or one of its associated entity will be loaded first.
+     */
+    @JvmStatic
+    inline fun <reified T> whenVanillaEntityLoads(uuid: UUID, crossinline consumer: (T) -> Unit)
+            = whenVanillaEntityLoads(uuid, T::class.java) { t -> consumer(t) }
 
     /**
      * Returns false if the entity is not a [RebarEntity] or does not exist.
@@ -201,10 +253,21 @@ object EntityStorage : Listener {
     @EventHandler
     private fun onEntityLoad(event: EntitiesLoadEvent) {
         for (entity in event.entities) {
+            val vanillaTasks = whenVanillaEntityLoadsTasks.remove(entity.uniqueId)
+            if (vanillaTasks != null) {
+                for (task in vanillaTasks) {
+                    try {
+                        task.accept(entity)
+                    } catch (t: Throwable) {
+                        t.printStackTrace()
+                    }
+                }
+            }
+
             val rebarEntity = RebarEntity.deserialize(entity) ?: continue
             add(rebarEntity)
 
-            val tasks = whenEntityLoadsTasks[rebarEntity.uuid]
+            val tasks = whenEntityLoadsTasks.remove(rebarEntity.uuid)
             if (tasks != null) {
                 for (task in tasks) {
                     try {
@@ -213,26 +276,19 @@ object EntityStorage : Listener {
                         t.printStackTrace()
                     }
                 }
-                whenEntityLoadsTasks.remove(rebarEntity.uuid)
             }
 
             RebarEntityLoadEvent(rebarEntity).callEvent()
         }
     }
 
-    // This currently does not differentiate between unloaded and dead entities because the API
-    // is broken (lol), hence the lack of an entity death listener
-    @EventHandler
-    private fun onEntityUnload(event: EntityRemoveFromWorldEvent) {
-        val rebarEntity = get(event.entity.uniqueId) ?: return
+    @EventHandler(priority = EventPriority.MONITOR)
+    private fun onEntityRemove(event: EntityRemoveEvent) {
+        if (event.cause == EntityRemoveEvent.Cause.UNLOAD) return
 
-        if (!event.entity.isDead) {
-            RebarEntity.serialize(rebarEntity)
-            rebarEntity.onUnload()
-            RebarEntityUnloadEvent(rebarEntity).callEvent()
-        } else {
-            RebarEntityDeathEvent(rebarEntity, event).callEvent()
-        }
+        val entity = event.entity
+        val rebarEntity = get(entity.uniqueId) ?: return
+        RebarEntityRemoveEvent(rebarEntity, event).callEvent()
 
         lockEntityWrite {
             entities.remove(rebarEntity.uuid)
@@ -244,12 +300,34 @@ object EntityStorage : Listener {
         }
     }
 
+    @EventHandler
+    private fun onEntityUnload(event: EntitiesUnloadEvent) {
+        for (entity in event.entities) {
+            val rebarEntity = get(entity.uniqueId) ?: return
+
+            RebarEntity.serialize(rebarEntity)
+            rebarEntity.onUnload()
+            RebarEntityUnloadEvent(rebarEntity).callEvent()
+
+            lockEntityWrite {
+                entities.remove(rebarEntity.uuid)
+                entitiesByKey[rebarEntity.schema.key]!!.remove(rebarEntity)
+                if (entitiesByKey[rebarEntity.schema.key]!!.isEmpty()) {
+                    entitiesByKey.remove(rebarEntity.schema.key)
+                }
+                entityAutosaveTasks.remove(rebarEntity.uuid)?.cancel()
+            }
+        }
+    }
+
     @JvmSynthetic
     internal fun cleanup(addon: RebarAddon) = lockEntityWrite {
         for ((_, value) in entitiesByKey.filter { it.key.isFromAddon(addon) }) {
             for (entity in value) {
                 try {
                     RebarEntity.serialize(entity)
+                    entity.onUnload()
+                    RebarEntityUnloadEvent(entity).callEvent()
                 } catch (e: Exception) {
                     Rebar.logger.severe("Error while unloading entity ${entity.uuid} (${entity.key}")
                     e.printStackTrace()
@@ -264,7 +342,15 @@ object EntityStorage : Listener {
     @JvmSynthetic
     internal fun cleanupEverything() {
         for (entity in entities.values) {
-            entity.write(entity.entity.persistentDataContainer)
+            RebarEntity.serialize(entity)
+            entity.onUnload()
+            RebarEntityUnloadEvent(entity).callEvent()
+        }
+
+        lockEntityWrite {
+            entities.clear()
+            entitiesByKey.clear()
+            entityAutosaveTasks.clear()
         }
     }
 

@@ -5,9 +5,11 @@ import org.bukkit.Location
 import org.bukkit.World
 import org.bukkit.block.Block
 import org.bukkit.block.BlockFace
+import org.bukkit.util.BoundingBox
 import org.bukkit.util.Vector
 import org.joml.Vector3i
 import java.util.UUID
+import io.papermc.paper.math.BlockPosition as PaperBlockPosition
 
 /**
  * Represents the position of a block (x, y, z, and world).
@@ -21,8 +23,14 @@ class BlockPosition(val worldId: UUID?, val x: Int, val y: Int, val z: Int) {
     val world: World?
         get() = worldId?.let { Bukkit.getWorld(it) }
 
-    val chunk: ChunkPosition
-        get() = ChunkPosition(worldId, x shr 4, z shr 4)
+    val chunkX: Int = x shr 4
+
+    val chunkZ: Int = z shr 4
+
+    val chunk: ChunkPosition = ChunkPosition(worldId, chunkX, chunkZ)
+
+    val isChunkLoaded: Boolean
+        get() = world?.isChunkLoaded(chunkX, chunkZ) == true
 
     @get:JvmSynthetic
     internal val asLong: Long
@@ -41,6 +49,9 @@ class BlockPosition(val worldId: UUID?, val x: Int, val y: Int, val z: Int) {
     constructor(world: World?, x: Int, y: Int, z: Int) : this(world?.uid, x, y, z)
 
     constructor(location: Location) : this(location.world?.uid, location.blockX, location.blockY, location.blockZ)
+
+    @Suppress("UnstableApiUsage")
+    constructor(world: World?, position: PaperBlockPosition) : this(world?.uid, position.blockX(), position.blockY(), position.blockZ())
 
     constructor(world: World?, position: Vector) : this(world?.uid, position.blockX, position.blockY, position.blockZ)
 
@@ -105,13 +116,23 @@ class BlockPosition(val worldId: UUID?, val x: Int, val y: Int, val z: Int) {
     val vector3i: Vector3i
         get() = Vector3i(x, y, z)
 
+    val vector: Vector
+        get() = Vector(x, y, z)
+
     val location: Location
         get() = Location(world, x.toDouble(), y.toDouble(), z.toDouble())
+
+    val boundingBox: BoundingBox
+        get() = BoundingBox(x.toDouble(), y.toDouble(), z.toDouble(), x + 1.0, y + 1.0, z + 1.0)
 
     val block: Block
         get() = world?.getBlockAt(x, y, z) ?: error("World is null")
 
     companion object {
+        fun asLong(block: Block): Long {
+            return asLong(block.x, block.y, block.z)
+        }
+
         fun asLong(x: Int, y: Int, z: Int): Long {
             return ((x and 0x3FFFFFF).toLong() shl 38)
                 .or((z and 0x3FFFFFF).toLong() shl 12)

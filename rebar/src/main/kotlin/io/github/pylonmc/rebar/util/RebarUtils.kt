@@ -5,31 +5,39 @@ package io.github.pylonmc.rebar.util
 
 import io.github.pylonmc.rebar.Rebar
 import io.github.pylonmc.rebar.addon.RebarAddon
-import io.github.pylonmc.rebar.config.Config
+import io.github.pylonmc.rebar.block.BlockListener
 import io.github.pylonmc.rebar.config.ConfigSection
 import io.github.pylonmc.rebar.config.ContributorConfig
 import io.github.pylonmc.rebar.config.adapter.ConfigAdapter
-import io.github.pylonmc.rebar.item.RebarItem
+import io.github.pylonmc.rebar.datatypes.RebarSerializers
 import io.github.pylonmc.rebar.i18n.customMiniMessage
+import io.github.pylonmc.rebar.item.ItemTypeWrapper
+import io.github.pylonmc.rebar.item.RebarItemSchema
+import io.github.pylonmc.rebar.item.interfaces.ProjectileRebarItemHandler
+import io.github.pylonmc.rebar.item.RebarItem
 import io.github.pylonmc.rebar.nms.NmsAccessor
 import io.github.pylonmc.rebar.registry.RebarRegistry
 import io.github.pylonmc.rebar.util.position.BlockPosition
+import io.github.pylonmc.rebar.util.position.position
 import io.papermc.paper.datacomponent.DataComponentType
+import io.papermc.paper.datacomponent.DataComponentTypes
 import io.papermc.paper.registry.keys.tags.BlockTypeTagKeys
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import net.kyori.adventure.text.Component
 import net.kyori.adventure.text.TranslatableComponent
 import net.kyori.adventure.text.TranslationArgumentLike
+import net.kyori.adventure.text.format.TextColor
 import net.kyori.adventure.text.serializer.plain.PlainTextComponentSerializer
 import org.bukkit.*
 import org.bukkit.attribute.Attribute
 import org.bukkit.block.Block
 import org.bukkit.block.BlockFace
-import org.bukkit.configuration.file.YamlConfiguration
+import org.bukkit.block.data.BlockData
 import org.bukkit.entity.Entity
 import org.bukkit.entity.LivingEntity
 import org.bukkit.entity.Player
+import org.bukkit.entity.*
 import org.bukkit.event.Event
 import org.bukkit.inventory.EquipmentSlot
 import org.bukkit.inventory.Inventory
@@ -37,6 +45,7 @@ import org.bukkit.inventory.ItemStack
 import org.bukkit.persistence.PersistentDataContainer
 import org.bukkit.persistence.PersistentDataHolder
 import org.bukkit.persistence.PersistentDataType
+import org.bukkit.util.BoundingBox
 import org.bukkit.util.Vector
 import org.joml.Matrix3f
 import org.joml.RoundingMode
@@ -306,17 +315,25 @@ fun Class<*>.isSubclassOf(other: Class<*>): Boolean = other.isAssignableFrom(thi
 fun fromMiniMessage(string: String): Component = customMiniMessage.deserialize(string)
 
 /**
- * Finds a Rebar item in an inventory. Use this to find Rebar items instead of traditional
+ * Finds a Rebar item in this inventory. Use this to find Rebar items instead of traditional
  * find methods, because this will compare Rebar IDs.
  *
- * @param inventory The inventory to search
+ * @param targetItemId The item id to find. Items will be compared by their Rebar ID
+ * @return The slot containing the item, or null if no item was found
+ */
+fun Inventory.findRebar(targetItemId: NamespacedKey): Int? = RebarRegistry.ITEMS[targetItemId]?.let { findRebar(it) }
+
+/**
+ * Finds a Rebar item in this inventory. Use this to find Rebar items instead of traditional
+ * find methods, because this will compare Rebar IDs.
+ *
  * @param targetItem The item to find. Items will be compared by their Rebar ID
  * @return The slot containing the item, or null if no item was found
  */
-fun findRebarItemInInventory(inventory: Inventory, targetItem: RebarItem): Int? {
-    for (i in 0..<inventory.size) {
-        val item = inventory.getItem(i)?.let {
-            RebarItem.fromStack(it)
+fun Inventory.findRebar(targetItem: RebarItemSchema): Int? {
+    for (i in 0..<size) {
+        val item = getItem(i)?.let {
+            RebarItemSchema.fromStack(it)
         }
         if (item == targetItem) {
             return i
@@ -325,10 +342,35 @@ fun findRebarItemInInventory(inventory: Inventory, targetItem: RebarItem): Int? 
     return null
 }
 
+/**
+ * Finds an item of the right type in this inventory. Use this to find items purely based on Vanilla / Rebar IDs.
+ *
+ * @param targetType The type to find. Items will be compared by their Vanilla / Rebar ID
+ * @return The slot containing the item, or null if no item was found
+ */
+fun Inventory.findType(targetType: ItemTypeWrapper): Int? {
+    for (i in 0..<size) {
+        val item = getItem(i)?.let {
+            ItemTypeWrapper(it)
+        }
+        if (item == targetType) {
+            return i
+        }
+    }
+    return null
+}
+
+fun Inventory.swapItem(from: Int, to: Int) {
+    val fromItem = getItem(from)
+    val toItem = getItem(to)
+    setItem(from, toItem)
+    setItem(to, fromItem)
+}
+
 @JvmSynthetic
 inline fun <reified T> ItemStack?.isRebarAndIsNot(): Boolean {
-    val rebarItem = RebarItem.fromStack(this)
-    return rebarItem != null && rebarItem !is T
+    val schema = RebarItemSchema.fromStack(this)
+    return schema != null && !schema.isType(T::class.java)
 }
 
 @JvmSynthetic
@@ -430,34 +472,45 @@ val Player.pdc: PersistentDataContainer
  * @return The merged config
  */
 @JvmSynthetic
-internal fun mergeGlobalConfig(addon: RebarAddon, from: String, to: String, warnMissing: Boolean = true): Config {
-    require(from.endsWith(".yml")) { "Config file must be a YAML file" }
-    require(to.endsWith(".yml")) { "Config file must be a YAML file" }
+internal fun mergeResource(
+    fromAddon: RebarAddon,
+    toAddon: RebarAddon,
+    from: String,
+    to: String,
+    warnMissing: Boolean = true
+): ConfigSection {
+    require(from.endsWith(".yml") || from.endsWith(".yaml")) {
+        "Config file must be a YAML file (addon: ${fromAddon.javaClass.simpleName}, path: $from)"
+    }
+    require(to.endsWith(".yml") || to.endsWith(".yaml")) {
+        "Config file must be a YAML file (addon: ${fromAddon.javaClass.simpleName}, path: $to)"
+    }
+
     val cached = globalConfigCache[from to to]
     if (cached != null) {
         return cached
     }
-    val globalConfig = Rebar.dataFolder.resolve(to)
-    if (!globalConfig.exists()) {
-        globalConfig.parentFile.mkdirs()
-        globalConfig.createNewFile()
+
+    val toConfigFile = toAddon.javaPlugin.dataFolder.resolve(to)
+    if (!toConfigFile.exists()) {
+        toConfigFile.parentFile.mkdirs()
+        toConfigFile.createNewFile()
     }
-    val config = Config(globalConfig)
-    val resource = addon.javaPlugin.getResource(from)
-    if (resource == null) {
-        if (warnMissing) Rebar.logger.warning("Resource not found: $from")
+
+    check(toConfigFile.exists()) { "Unable to create file ${toConfigFile.absolutePath}" }
+    val toConfig = ConfigSection.fromOrThrow(toConfigFile)
+    val fromConfig = ConfigSection.fromResource(fromAddon.javaPlugin, from)
+    if (fromConfig == null) {
+        if (warnMissing) toAddon.javaPlugin.logger.warning("Resource not found: $from")
     } else {
-        val newConfig = resource.reader().use(YamlConfiguration::loadConfiguration)
-        config.internalConfig.setDefaults(newConfig)
-        config.internalConfig.options().copyDefaults(true)
-        config.merge(ConfigSection(newConfig))
-        config.save()
+        toConfig.merge(fromConfig)
+        toConfig.save(toConfigFile)
     }
-    globalConfigCache[from to to] = config
-    return config
+    globalConfigCache[from to to] = toConfig
+    return toConfig
 }
 
-private val globalConfigCache: MutableMap<Pair<String, String>, Config> = mutableMapOf()
+private val globalConfigCache: MutableMap<Pair<String, String>, ConfigSection> = mutableMapOf()
 
 @JvmSynthetic
 internal fun getContributors(addon: RebarAddon): List<ContributorConfig> {
@@ -466,13 +519,12 @@ internal fun getContributors(addon: RebarAddon): List<ContributorConfig> {
         return cached
     }
 
-    val resource = addon.javaPlugin.getResource("contributors.yml")
-    val contributors = if (resource != null) {
-        val config = YamlConfiguration.loadConfiguration(resource.reader())
-        ConfigSection(config).get("contributors", ConfigAdapter.LIST.from(ConfigAdapter.CONTRIBUTOR), emptyList())
-    } else {
+    val config = ConfigSection.fromResource(addon.javaPlugin, "contributors.yml")
+    val contributors = config?.get(
+        "contributors",
+        ConfigAdapter.LIST.from(ConfigAdapter.CONTRIBUTOR),
         emptyList()
-    }
+    ) ?: emptyList()
     contributorsCache[addon] = contributors
     return contributors
 }
@@ -493,6 +545,13 @@ fun ItemStack.vanillaDisplayName(): Component
 
 val Component.plainText: String
     get() = PlainTextComponentSerializer.plainText().serialize(this)
+
+fun blocksWithin(world: World, boundingBox: BoundingBox) = blocksBetween(
+    BlockPosition(world, boundingBox.min),
+    BlockPosition(world, boundingBox.max)
+)
+
+fun blocksBetween(from: BlockPosition, to: BlockPosition): List<Block> = NmsAccessor.instance.blocksBetween(from, to)
 
 /**
  * Does not include first or last block
@@ -562,12 +621,14 @@ fun findClosestDistanceBetweenLineAndPoint(p: Vector3f, p1: Vector3f, d1: Vector
 internal fun getTargetEntity(player: Player, maxDistanceBetweenRayAndEntity: Float): Entity? {
     val range = player.getAttribute(Attribute.ENTITY_INTERACTION_RANGE)!!.value
     val entities = player.getNearbyEntities(range, range, range)
+    val eyeLocation = player.eyeLocation.toVector().toVector3f()
+    val eyeDirection = player.eyeLocation.getDirection().toVector3f()
 
     for (entity in entities) {
         val distance = findClosestDistanceBetweenLineAndPoint(
             entity.location.toVector().toVector3f(),
-            player.eyeLocation.toVector().toVector3f(),
-            player.eyeLocation.getDirection().toVector3f()
+            eyeLocation,
+            eyeDirection
         )
         if (distance <= maxDistanceBetweenRayAndEntity) {
             return entity
@@ -628,3 +689,238 @@ suspend fun delayTicks(ticks: Long) = delay(ticks * 50)
  */
 @JvmSynthetic
 fun CoroutineContext.createChildContext(): CoroutineContext = this + Job(this[Job])
+
+/**
+ * @return Whether the entity has at least one tracking player, a tracking player is just a player who has & is receiving packets for the entity.
+ */
+fun Entity.hasTracker() = NmsAccessor.instance.hasTracker(this)
+
+fun Projectile.sourceItem(): ItemStack? {
+    return when(this) {
+        is ThrowableProjectile -> this.item
+        is SizedFireball -> this.displayItem
+        is AbstractArrow -> this.itemStack
+        is Firework -> this.item
+        else -> persistentDataContainer.get(ProjectileRebarItemHandler.sourceItemKey, RebarSerializers.ITEM_STACK)
+    }
+}
+
+fun Entity.getWeaponItem(): ItemStack? {
+    return NmsAccessor.instance.getWeaponItem(this)
+}
+
+@JvmName("colorToTextColor")
+fun Color.toTextColor(): TextColor {
+    return TextColor.color(this.red, this.green, this.blue);
+}
+
+/**
+ * Checks whether two items are of the same type, comparing Rebar IDs if they are Rebar items and vanilla IDs if they are not.
+ */
+fun rebarTypeSimilar(item1: ItemStack, item2: ItemStack): Boolean {
+    // This does not use ItemTypeWrapper because that would be useless allocation
+    val schema1 = RebarItemSchema.fromStack(item1)
+    val schema2 = RebarItemSchema.fromStack(item2)
+    if ((schema1 != null && schema2 == null) || (schema1 == null && schema2 == null)) {
+        return false
+    } else if (schema1 != null && schema2 != null) {
+        return schema1 === schema2
+    }
+    return item1.type == item2.type
+}
+
+@JvmSynthetic // java should just use RebarItem#isRebarItem
+fun ItemStack.isRebarItem(key: NamespacedKey) = RebarItem.isRebarItem(this, key)
+
+fun <T : Any> ItemStack.forceSetData(type: DataComponentType.Valued<T>, value: Any?) {
+    if (value == null) {
+        unsetData(type)
+        return
+    }
+
+    @Suppress("UNCHECKED_CAST")
+    setData(type, value as? T ?: return)
+}
+
+fun ItemStack.setComponents(components: Map<DataComponentType, Any?>) {
+    for (entry in components) {
+        when (val key = entry.key) {
+            is DataComponentType.NonValued -> setData(key)
+            is DataComponentType.Valued<*> -> forceSetData(key, entry.value)
+        }
+    }
+}
+
+fun ItemStack.overriddenDataTypes(): List<DataComponentType> {
+    return NmsAccessor.instance.getOverriddenTypes(this)
+}
+
+fun ItemStack.overriddenComponents(exact: Boolean): Map<DataComponentType, Any?>
+    = NmsAccessor.instance.overriddenComponents(this, exact)
+
+fun ItemStack.matchesComponents(components: Map<DataComponentType, Any?>)
+    = NmsAccessor.instance.componentsMatch(this, components)
+
+fun ItemStack.componentsEqual(components: Map<DataComponentType, Any?>)
+    = NmsAccessor.instance.componentsEqual(this, components)
+
+fun ItemStack.hasDefaultComponents(components: Set<DataComponentType>)
+    = NmsAccessor.instance.hasDefaultComponents(this, components)
+
+val ItemStack.isDefaultComponents: Boolean
+    get() = NmsAccessor.instance.isDefaultComponents(this)
+
+fun Material.getPreferredTool(): Material? {
+    if (Tag.MINEABLE_AXE.isTagged(this)) {
+        if (Tag.NEEDS_DIAMOND_TOOL.isTagged(this)) {
+            return Material.DIAMOND_AXE
+        }
+        if (Tag.NEEDS_STONE_TOOL.isTagged(this)) {
+            return Material.STONE_AXE
+        }
+        if (Tag.NEEDS_IRON_TOOL.isTagged(this)) {
+            return Material.IRON_AXE
+        }
+        return Material.WOODEN_AXE
+    }
+
+    if (Tag.MINEABLE_PICKAXE.isTagged(this)) {
+        if (Tag.NEEDS_DIAMOND_TOOL.isTagged(this)) {
+            return Material.DIAMOND_PICKAXE
+        }
+        if (Tag.NEEDS_STONE_TOOL.isTagged(this)) {
+            return Material.STONE_PICKAXE
+        }
+        if (Tag.NEEDS_IRON_TOOL.isTagged(this)) {
+            return Material.IRON_PICKAXE
+        }
+        return Material.WOODEN_PICKAXE
+    }
+
+    if (Tag.MINEABLE_SHOVEL.isTagged(this)) {
+        if (Tag.NEEDS_DIAMOND_TOOL.isTagged(this)) {
+            return Material.DIAMOND_SHOVEL
+        }
+        if (Tag.NEEDS_STONE_TOOL.isTagged(this)) {
+            return Material.STONE_SHOVEL
+        }
+        if (Tag.NEEDS_IRON_TOOL.isTagged(this)) {
+            return Material.IRON_SHOVEL
+        }
+        return Material.WOODEN_SHOVEL
+    }
+
+    if (Tag.MINEABLE_HOE.isTagged(this)) {
+        if (Tag.NEEDS_DIAMOND_TOOL.isTagged(this)) {
+            return Material.DIAMOND_HOE
+        }
+        if (Tag.NEEDS_STONE_TOOL.isTagged(this)) {
+            return Material.STONE_HOE
+        }
+        if (Tag.NEEDS_IRON_TOOL.isTagged(this)) {
+            return Material.IRON_HOE
+        }
+        return Material.WOODEN_HOE
+    }
+
+    if (Tag.SWORD_EFFICIENT.isTagged(this) || Tag.SWORD_INSTANTLY_MINES.isTagged(this)) {
+        return Material.WOODEN_SWORD
+    }
+
+    // TODO shears - tags will be added next update, we can't do this yet
+
+    return null
+}
+
+val Block.breakProgress
+    get() = BlockListener.blockBreakProgressMap[position] ?: 0.0F
+
+val Block.isChunkLoaded: Boolean
+    get() = world.isChunkLoaded(x shr 4, z shr 4)
+
+fun isSymmetrical(width: Int, height: Int, list: List<*>): Boolean {
+    if (width == 1) return true
+    val center = width / 2
+    for (y in 0..<height) {
+        for (left in 0..<center) {
+            val right = width - 1 - left
+            if (list[left + y * width] != list[right + y * width]) {
+                return false
+            }
+        }
+    }
+    return true
+}
+
+/**
+ * Sets the raw [ItemStack] at [slot] without any checks or validation. This will not call any events called by normal methods.
+ * This will still notify any windows backed by this inventory.
+ *
+ * Note: The main reason this method exists is to improve performance over the typical [setItem] method, which calls events and clones [ItemStack]s.
+ * You should only call this event when you know you can ignore all events and handlers.
+ */
+fun VirtualInventory.unsafeSet(slot: Int, stack: ItemStack?) {
+    unsafeItems[slot] = stack
+    notifyWindows(slot)
+}
+
+/**
+ * Sets the raw [item amount][ItemStack.getAmount] at [slot] without any checks or validation. This will not call any events called by normal methods.
+ * This will still notify any windows backed by this inventory.
+ *
+ * Note: The main reason this method exists is to improve performance over the typical [setItemAmount] method, which calls events and clones [ItemStack]s.
+ * You should only call this event when you know you can ignore all events and handlers.
+ */
+fun VirtualInventory.unsafeSetAmount(slot: Int, amount: Int) {
+    val item = getUnsafeItem(slot)!!
+    item.amount = amount
+    notifyWindows(slot)
+}
+
+/**
+ * Adds to the raw [item amount][ItemStack.getAmount] at [slot] without any checks or validation. This will not call any events called by normal methods.
+ * This will still notify any windows backed by this inventory.
+ *
+ * Note: The main reason this method exists is to improve performance over the typical [addItemAmount] method, which calls events and clones [ItemStack]s.
+ * You should only call this event when you know you can ignore all events and handlers.
+ */
+fun VirtualInventory.unsafeAdd(slot: Int, amount: Int) {
+    val item = getUnsafeItem(slot)!!
+    item.add(amount)
+    notifyWindows(slot)
+}
+
+/**
+ * Subtracts from the raw [item amount][ItemStack.getAmount] at [slot] without any checks or validation. This will not call any events called by normal methods.
+ * This will still notify any windows backed by this inventory.
+ *
+ * Note: The main reason this method exists is to improve performance over the typical [setItem] and [addItemAmount] methods, which calls events and clones [ItemStack]s.
+ * You should only call this event when you know you can ignore all events and handlers.
+ */
+fun VirtualInventory.unsafeSubtract(slot: Int, amount: Int) {
+    val item = getUnsafeItem(slot)!!
+    check(item.amount >= amount) { "Cannot subtract $amount from item with amount ${item.amount}" }
+    item.subtract(amount)
+    if (item.isEmpty) unsafeItems[slot] = null
+    notifyWindows(slot)
+}
+
+@JvmOverloads
+fun Block.editBlockData(editor: Consumer<BlockData>, applyPhysics: Boolean = true) {
+    editBlockData(BlockData::class.java, editor, applyPhysics)
+}
+
+@JvmOverloads
+fun <D: BlockData> Block.editBlockData(dataType: Class<D>, editor: Consumer<D>, applyPhysics: Boolean = true) {
+    val blockData = this.blockData
+    editor.accept(dataType.cast(blockData))
+    setBlockData(blockData, applyPhysics)
+}
+
+fun ItemStack.isBroken(): Boolean {
+    val maxDamage = getData(DataComponentTypes.MAX_DAMAGE) ?: return false
+    val damage = getData(DataComponentTypes.DAMAGE) ?: return false
+    return damage >= maxDamage && !hasData(DataComponentTypes.UNBREAKABLE);
+}
+
+const val FLUID_EPSILON = 1.0e-6

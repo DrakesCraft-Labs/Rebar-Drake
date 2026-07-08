@@ -2,13 +2,14 @@ package io.github.pylonmc.rebar.fluid
 
 import io.github.pylonmc.rebar.Rebar
 import io.github.pylonmc.rebar.block.BlockStorage
-import io.github.pylonmc.rebar.block.base.RebarFluidBlock
+import io.github.pylonmc.rebar.block.interfaces.FluidRebarBlock
 import io.github.pylonmc.rebar.config.RebarConfig
 import io.github.pylonmc.rebar.event.PreRebarFluidPointConnectEvent
 import io.github.pylonmc.rebar.event.PreRebarFluidPointDisconnectEvent
 import io.github.pylonmc.rebar.event.RebarFluidPointConnectEvent
 import io.github.pylonmc.rebar.event.RebarFluidPointDisconnectEvent
 import io.github.pylonmc.rebar.fluid.FluidManager.unload
+import io.github.pylonmc.rebar.util.FLUID_EPSILON
 import io.github.pylonmc.rebar.util.delayTicks
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
@@ -276,15 +277,15 @@ internal object FluidManager {
     fun getPoints(segment: UUID): List<VirtualFluidPoint>
             = segments[segment]!!.points
 
-    data class FluidSupplyInfo(var amount: Double, val blocks: IdentityHashMap<RebarFluidBlock, Double>)
+    data class FluidSupplyInfo(var amount: Double, val blocks: IdentityHashMap<FluidRebarBlock, Double>)
 
     @JvmStatic
-    fun getSuppliedFluids(blocks: List<RebarFluidBlock>): Map<RebarFluid, FluidSupplyInfo> {
+    fun getSuppliedFluids(blocks: List<FluidRebarBlock>): Map<RebarFluid, FluidSupplyInfo> {
         val suppliedFluids: MutableMap<RebarFluid, FluidSupplyInfo> = mutableMapOf()
         for (block in blocks) {
             try {
                 for ((fluid, amount) in block.getSuppliedFluids()) {
-                    if (amount < 1.0e-6) {
+                    if (amount < FLUID_EPSILON) {
                         // prevent floating point issues supplying tiny amounts of liquid
                         continue
                     }
@@ -306,13 +307,13 @@ internal object FluidManager {
      * Find how much of the fluid each input point on the block is requesting
      * Ignore input points requesting zero or effectively zero of the fluid
      */
-    fun getRequestedFluids(blocks: List<RebarFluidBlock>, fluid: RebarFluid): Pair<MutableMap<RebarFluidBlock, Double>, Double> {
-        val requesters: MutableMap<RebarFluidBlock, Double> = mutableMapOf()
+    fun getRequestedFluids(blocks: List<FluidRebarBlock>, fluid: RebarFluid): Pair<MutableMap<FluidRebarBlock, Double>, Double> {
+        val requesters: MutableMap<FluidRebarBlock, Double> = mutableMapOf()
         var totalRequested = 0.0
         for (block in blocks) {
             try {
                 val fluidAmountRequested = block.fluidAmountRequested(fluid)
-                if (fluidAmountRequested < 1.0e-9) {
+                if (fluidAmountRequested < FLUID_EPSILON) {
                     continue
                 }
                 requesters[block] = fluidAmountRequested
@@ -326,11 +327,11 @@ internal object FluidManager {
     }
 
     private fun tick(segment: UUID) {
-        val supplierBlocks = mutableListOf<RebarFluidBlock>()
-        val requesterBlocks = mutableListOf<RebarFluidBlock>()
+        val supplierBlocks = mutableListOf<FluidRebarBlock>()
+        val requesterBlocks = mutableListOf<FluidRebarBlock>()
         for (point in getPoints(segment)) {
-            if (point.position.chunk.isLoaded) {
-                BlockStorage.getAs<RebarFluidBlock>(point.position)?.let { fluidBlock ->
+            if (point.position.isChunkLoaded) {
+                BlockStorage.getAs<FluidRebarBlock>(point.position)?.let { fluidBlock ->
                     if (point.type == FluidPointType.OUTPUT) {
                         supplierBlocks.add(fluidBlock)
                     }

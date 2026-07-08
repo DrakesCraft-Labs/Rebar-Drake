@@ -1,8 +1,8 @@
 package io.github.pylonmc.rebar.test.block.fluid;
 
 import io.github.pylonmc.rebar.block.RebarBlock;
-import io.github.pylonmc.rebar.block.base.RebarFluidBlock;
-import io.github.pylonmc.rebar.block.base.RebarUnloadBlock;
+import io.github.pylonmc.rebar.block.interfaces.FluidRebarBlock;
+import io.github.pylonmc.rebar.block.interfaces.UnloadRebarBlockHandler;
 import io.github.pylonmc.rebar.block.context.BlockCreateContext;
 import io.github.pylonmc.rebar.config.RebarConfig;
 import io.github.pylonmc.rebar.datatypes.RebarSerializers;
@@ -12,7 +12,7 @@ import io.github.pylonmc.rebar.fluid.FluidPointType;
 import io.github.pylonmc.rebar.fluid.RebarFluid;
 import io.github.pylonmc.rebar.fluid.VirtualFluidPoint;
 import io.github.pylonmc.rebar.test.RebarTest;
-import io.github.pylonmc.rebar.test.fluid.Fluids;
+import io.github.pylonmc.rebar.test.fluid.TestFluids;
 import kotlin.Pair;
 import lombok.Getter;
 import org.bukkit.NamespacedKey;
@@ -24,7 +24,7 @@ import java.util.List;
 import java.util.Map;
 
 
-public class FluidProducer extends RebarBlock implements RebarFluidBlock, RebarUnloadBlock {
+public class FluidProducer extends RebarBlock implements FluidRebarBlock, UnloadRebarBlockHandler {
 
     public static final NamespacedKey LAVA_PRODUCER_KEY = RebarTest.key("lava_producer");
     public static final NamespacedKey WATER_PRODUCER_KEY = RebarTest.key("water_producer");
@@ -72,8 +72,8 @@ public class FluidProducer extends RebarBlock implements RebarFluidBlock, RebarU
 
     private RebarFluid getFluidType() {
         return Map.of(
-                LAVA_PRODUCER_KEY, Fluids.LAVA,
-                WATER_PRODUCER_KEY, Fluids.WATER
+                LAVA_PRODUCER_KEY, TestFluids.LAVA,
+                WATER_PRODUCER_KEY, TestFluids.WATER
         ).get(getKey());
     }
 }

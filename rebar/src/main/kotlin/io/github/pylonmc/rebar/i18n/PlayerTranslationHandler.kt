@@ -3,11 +3,15 @@
 package io.github.pylonmc.rebar.i18n
 
 import io.github.pylonmc.rebar.datatypes.RebarSerializers
+import io.github.pylonmc.rebar.fluid.RebarFluid
 import io.github.pylonmc.rebar.i18n.RebarTranslator.Companion.translate
+import io.github.pylonmc.rebar.i18n.RebarTranslator.Companion.untranslate
 import io.github.pylonmc.rebar.item.RebarItem
+import io.github.pylonmc.rebar.resourcepack.armor.ArmorTextureEngine
 import io.github.pylonmc.rebar.util.editData
 import io.github.pylonmc.rebar.util.rebarKey
 import io.papermc.paper.datacomponent.DataComponentTypes
+import io.papermc.paper.datacomponent.item.BundleContents
 import io.papermc.paper.datacomponent.item.ChargedProjectiles
 import io.papermc.paper.datacomponent.item.ItemContainerContents
 import io.papermc.paper.datacomponent.item.ItemLore
@@ -19,21 +23,24 @@ import org.jetbrains.annotations.ApiStatus
 
 @ApiStatus.Internal
 class PlayerTranslationHandler internal constructor(private val player: Player) {
-    companion object {
-        val FOOTER_APPENDED = rebarKey("footer_appended")
-    }
+    fun handleItem(stack: ItemStack?) {
+        if (stack == null || stack.isEmpty) return
 
-    fun handleItem(stack: ItemStack) {
         val rebarItem = RebarItem.fromStack(stack)
+        val rebarFluid = RebarFluid.fromStack(stack)
         val placeholders = rebarItem?.getPlaceholders().orEmpty()
 
-        stack.translate(player.locale(), placeholders)
+        stack.translate(player, placeholders)
 
-        if (rebarItem != null && !stack.persistentDataContainer.has(FOOTER_APPENDED)) {
+        if ((rebarItem != null || rebarFluid != null) && !stack.persistentDataContainer.has(FOOTER_APPENDED)) {
             stack.editData(DataComponentTypes.LORE) { lore ->
                 val newLore = lore.lines().toMutableList()
-                newLore.add(GlobalTranslator.render(rebarItem.addon.footerName, player.locale()))
-                if (rebarItem.isDisabled) {
+                if (!stack.enchantments.isEmpty()) {
+                    newLore.addFirst(Component.empty())
+                }
+                val addon = rebarItem?.addon ?: rebarFluid?.addon!!
+                newLore.add(GlobalTranslator.render(addon.footerName, player.locale()))
+                if (rebarItem?.isDisabled ?: false) {
                     newLore.add(
                         GlobalTranslator.render(
                             Component.translatable("rebar.message.disabled.lore"),
@@ -52,7 +59,8 @@ class PlayerTranslationHandler internal constructor(private val player: Player) 
         stack.editData(DataComponentTypes.CHARGED_PROJECTILES) { chargedProjectiles ->
             val translated = chargedProjectiles.projectiles().map { projectile ->
                 handleItem(projectile)
-                projectile
+                @Suppress("USELESS_ELVIS") // For some reason paper *does* pass null here instead of empty
+                projectile ?: ItemStack.empty()
             }
             ChargedProjectiles.chargedProjectiles(translated)
         }
@@ -60,9 +68,50 @@ class PlayerTranslationHandler internal constructor(private val player: Player) 
         stack.editData(DataComponentTypes.CONTAINER) { container ->
             val translated = container.contents().map { item ->
                 handleItem(item)
-                item
+                @Suppress("USELESS_ELVIS") // For some reason paper *does* pass null here instead of empty
+                item ?: ItemStack.empty()
             }
             ItemContainerContents.containerContents(translated)
+        }
+
+        stack.editData(DataComponentTypes.BUNDLE_CONTENTS) { bundleContents ->
+            val translated = bundleContents.contents().map { it.apply { handleItem(this) } }
+            BundleContents.bundleContents(translated)
+        }
+
+        ArmorTextureEngine.handleItem(player, stack)
+    }
+
+    companion object {
+        val FOOTER_APPENDED = rebarKey("footer_appended")
+
+        fun resetItem(stack: ItemStack) {
+            stack.untranslate()
+
+            stack.editData(DataComponentTypes.CHARGED_PROJECTILES) { chargedProjectiles ->
+                val translated = chargedProjectiles.projectiles().map { projectile ->
+                    resetItem(projectile)
+                    projectile
+                }
+                ChargedProjectiles.chargedProjectiles(translated)
+            }
+
+            stack.editData(DataComponentTypes.CONTAINER) { container ->
+                val translated = container.contents().map { item ->
+                    resetItem(item)
+                    item
+                }
+                ItemContainerContents.containerContents(translated)
+            }
+
+            stack.editData(DataComponentTypes.BUNDLE_CONTENTS) { bundleContents ->
+                val translated = bundleContents.contents().map { it.apply { resetItem(this) } }
+                BundleContents.bundleContents(translated)
+            }
+
+            stack.editPersistentDataContainer {
+                it.remove(FOOTER_APPENDED)
+            }
         }
     }
 }

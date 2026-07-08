@@ -1,10 +1,13 @@
 package io.github.pylonmc.rebar.content.cargo
 
-import io.github.pylonmc.rebar.Rebar
 import io.github.pylonmc.rebar.block.BlockStorage
 import io.github.pylonmc.rebar.block.RebarBlock
-import io.github.pylonmc.rebar.block.base.*
-import io.github.pylonmc.rebar.block.base.RebarEntityHolderBlock.Companion.holders
+import io.github.pylonmc.rebar.block.interfaces.EntityHolderRebarBlock.Companion.holders
+import io.github.pylonmc.rebar.block.interfaces.EntityGroupCulledRebarBlock
+import io.github.pylonmc.rebar.block.interfaces.EntityHolderRebarBlock
+import io.github.pylonmc.rebar.block.interfaces.BlockBreakRebarBlockHandler
+import io.github.pylonmc.rebar.block.interfaces.CargoRebarBlock
+import io.github.pylonmc.rebar.block.interfaces.FacadeRebarBlock
 import io.github.pylonmc.rebar.block.context.BlockBreakContext
 import io.github.pylonmc.rebar.block.context.BlockCreateContext
 import io.github.pylonmc.rebar.datatypes.RebarSerializers
@@ -19,9 +22,7 @@ import io.github.pylonmc.rebar.util.IMMEDIATE_FACES
 import io.github.pylonmc.rebar.util.position.BlockPosition
 import io.github.pylonmc.rebar.util.position.position
 import io.github.pylonmc.rebar.util.rebarKey
-import io.github.pylonmc.rebar.util.scheduleRemove
 import io.github.pylonmc.rebar.util.setNullable
-import org.bukkit.Bukkit
 import org.bukkit.Location
 import org.bukkit.Material
 import org.bukkit.block.Block
@@ -32,11 +33,11 @@ import org.bukkit.event.Listener
 import org.bukkit.event.entity.EntityRemoveEvent
 import org.bukkit.persistence.PersistentDataContainer
 
-class CargoDuct : RebarBlock, RebarBreakHandler, RebarEntityHolderBlock, RebarEntityGroupCulledBlock, RebarFacadeBlock {
-    override val facadeDefaultBlockType = Material.STRUCTURE_VOID
+class CargoDuct : RebarBlock, BlockBreakRebarBlockHandler, EntityHolderRebarBlock, EntityGroupCulledRebarBlock,
+    FacadeRebarBlock {
 
     var connectedFaces = mutableListOf<BlockFace>()
-    val faceGroups = mutableMapOf<BlockFace, RebarEntityGroupCulledBlock.EntityCullingGroup>()
+    val faceGroups = mutableMapOf<BlockFace, EntityGroupCulledRebarBlock.EntityCullingGroup>()
     override val cullingGroups
         get() = faceGroups.values
     override var disableBlockTextureEntity = true
@@ -59,7 +60,7 @@ class CargoDuct : RebarBlock, RebarBreakHandler, RebarEntityHolderBlock, RebarEn
                     return@whenEntityLoads
                 }
 
-                val cullingGroup = RebarEntityGroupCulledBlock.EntityCullingGroup(face.name)
+                val cullingGroup = EntityGroupCulledRebarBlock.EntityCullingGroup(face.name)
                 cullingGroup.entityIds.add(display.uniqueId)
 
                 val blockPositions = display.persistentDataContainer.get(blocksKey, blocksType) ?: return@whenEntityLoads
@@ -76,7 +77,7 @@ class CargoDuct : RebarBlock, RebarBreakHandler, RebarEntityHolderBlock, RebarEn
         pdc.setNullable(connectedFacesKey, connectedFacesType, connectedFaces)
     }
 
-    override fun postBreak(context: BlockBreakContext) {
+    override fun onPostBlockBreak(context: BlockBreakContext) {
         for (face in connectedFaces) {
             val connectedBlock = connectedBlock(face)
             when (connectedBlock) {
@@ -85,7 +86,7 @@ class CargoDuct : RebarBlock, RebarBreakHandler, RebarEntityHolderBlock, RebarEn
                     connectedBlock.updateConnectedFaces()
                     RebarCargoDisconnectEvent(this, connectedBlock).callEvent()
                 }
-                is RebarCargoBlock -> {
+                is CargoRebarBlock -> {
                     RebarCargoDisconnectEvent(this, connectedBlock).callEvent()
                 }
             }
@@ -100,14 +101,14 @@ class CargoDuct : RebarBlock, RebarBreakHandler, RebarEntityHolderBlock, RebarEn
         val adjacentCargoBlocks = mutableMapOf<BlockFace, RebarBlock>()
         for (face in IMMEDIATE_FACES) {
             val adjacentBlock = BlockStorage.get(block.getRelative(face))
-            if (face !in connectedFaces && (adjacentBlock is CargoDuct || adjacentBlock is RebarCargoBlock)) {
+            if (face !in connectedFaces && (adjacentBlock is CargoDuct || adjacentBlock is CargoRebarBlock)) {
                 adjacentCargoBlocks.put(face, adjacentBlock)
             }
         }
 
         // 1: Prioritise RebarCargoBlocks
         for ((face, block) in adjacentCargoBlocks) {
-            if (connectedFaces.size != 2 && block is RebarCargoBlock && block.cargoLogisticGroups.containsKey(face.oppositeFace)) {
+            if (connectedFaces.size != 2 && block is CargoRebarBlock && block.cargoLogisticGroups.containsKey(face.oppositeFace)) {
                 if (RebarCargoConnectEvent(this, block).callEvent()) {
                     connectedFaces.add(face)
                 }
@@ -142,14 +143,14 @@ class CargoDuct : RebarBlock, RebarBreakHandler, RebarEntityHolderBlock, RebarEn
         // display that continues the same direction as any of the connected faces)
         for (face in connectedFaces) {
             (connectedBlock(face) as? CargoDuct)?.let {
-                it.getHeldEntity(ductDisplayName(face))?.scheduleRemove()
-                it.getHeldEntity(NOT_CONNECTED_DUCT_DISPLAY_NAME)?.scheduleRemove()
+                it.getHeldEntity(ductDisplayName(face))?.remove()
+                it.getHeldEntity(NOT_CONNECTED_DUCT_DISPLAY_NAME)?.remove()
                 it.faceGroups.remove(face)
                 it.faceGroups.remove(BlockFace.SELF)
             }
         }
         for (entity in heldEntities.keys.toList()) { // clone to prevent concurrent modification exception
-            getHeldEntity(entity)?.scheduleRemove()
+            getHeldEntity(entity)?.remove()
             heldEntities.remove(entity)
         }
         faceGroups.clear()
@@ -166,7 +167,7 @@ class CargoDuct : RebarBlock, RebarBreakHandler, RebarEntityHolderBlock, RebarEn
             // Spawn a cube display
             createNotConnectedDuctDisplay(block.location.toCenterLocation())
             // We are the only one using this display, so a singular group for ourselves
-            faceGroups[BlockFace.SELF] = RebarEntityGroupCulledBlock.EntityCullingGroup("SELF").also {
+            faceGroups[BlockFace.SELF] = EntityGroupCulledRebarBlock.EntityCullingGroup("SELF").also {
                 it.blocks.add(this)
                 it.entityIds.add(getHeldEntityUuidOrThrow(NOT_CONNECTED_DUCT_DISPLAY_NAME))
             }
@@ -207,7 +208,7 @@ class CargoDuct : RebarBlock, RebarBreakHandler, RebarEntityHolderBlock, RebarEn
                 continue
             }
 
-            if (nextBlock is RebarCargoBlock) {
+            if (nextBlock is CargoRebarBlock) {
                 return nextBlock.block
             }
 
@@ -274,7 +275,7 @@ class CargoDuct : RebarBlock, RebarBreakHandler, RebarEntityHolderBlock, RebarEn
 
         // Add the display to every CargoDuct on the line
         val associatedBlocks = mutableListOf<BlockPosition>()
-        val cullingGroup = RebarEntityGroupCulledBlock.EntityCullingGroup(fromToFace.name)
+        val cullingGroup = EntityGroupCulledRebarBlock.EntityCullingGroup(fromToFace.name)
         cullingGroup.entityIds.add(display.uniqueId)
         // (start)
         BlockStorage.getAs<CargoDuct>(from)?.let {
@@ -369,7 +370,7 @@ class CargoDuct : RebarBlock, RebarBreakHandler, RebarEntityHolderBlock, RebarEn
 
         /**
          * Cargo duct displays are 'owned' by multiple blocks, but the entity removal
-         * handling in [RebarEntityHolderBlock] assumes a single block holds the
+         * handling in [EntityHolderRebarBlock] assumes a single block holds the
          * entity. We therefore have to roll our own entity removal logic that will
          * store *all* the blocks that own the entity in the entity's PDC, and remove
          * the entity from all of those blocks when it is removed.
@@ -379,7 +380,7 @@ class CargoDuct : RebarBlock, RebarBreakHandler, RebarEntityHolderBlock, RebarEn
             if (event.cause == EntityRemoveEvent.Cause.UNLOAD || event.cause == EntityRemoveEvent.Cause.PLAYER_QUIT) return
             val blockPositions = event.entity.persistentDataContainer.get(blocksKey, blocksType) ?: return
             for (blockPos in blockPositions) {
-                val block = BlockStorage.get(blockPos) as? RebarEntityHolderBlock ?: continue
+                val block = BlockStorage.get(blockPos) as? EntityHolderRebarBlock ?: continue
                 holders[block]?.entries?.removeIf { it.value == event.entity.uniqueId }
             }
         }

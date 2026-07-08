@@ -1,12 +1,14 @@
 package io.github.pylonmc.rebar.logistics
 
 import io.github.pylonmc.rebar.block.BlockStorage
-import io.github.pylonmc.rebar.block.base.RebarCargoBlock
+import io.github.pylonmc.rebar.block.interfaces.CargoRebarBlock
 import io.github.pylonmc.rebar.content.cargo.CargoDuct
 import io.github.pylonmc.rebar.event.RebarBlockBreakEvent
 import io.github.pylonmc.rebar.event.RebarBlockLoadEvent
 import io.github.pylonmc.rebar.event.RebarBlockPlaceEvent
 import io.github.pylonmc.rebar.event.RebarBlockUnloadEvent
+import io.github.pylonmc.rebar.event.RebarCargoConnectEvent
+import io.github.pylonmc.rebar.event.RebarCargoDisconnectEvent
 import io.github.pylonmc.rebar.logistics.CargoRoutes.blockRoutesCache
 import io.github.pylonmc.rebar.util.IMMEDIATE_FACES
 import io.github.pylonmc.rebar.util.position.BlockPosition
@@ -32,7 +34,7 @@ import org.jetbrains.annotations.ApiStatus
 @ApiStatus.Internal
 object CargoRoutes : Listener {
 
-    data class CargoRouteEndpoint(val block: RebarCargoBlock, val face: BlockFace)
+    data class CargoRouteEndpoint(val block: CargoRebarBlock, val face: BlockFace)
 
     private val routeCache: MutableMap<CargoRouteEndpoint, CargoRouteEndpoint?> = mutableMapOf()
 
@@ -58,7 +60,7 @@ object CargoRoutes : Listener {
         return routeCache[source]
     }
 
-    fun getCargoTarget(sourceBlock: RebarCargoBlock, sourceFace: BlockFace): CargoRouteEndpoint?
+    fun getCargoTarget(sourceBlock: CargoRebarBlock, sourceFace: BlockFace): CargoRouteEndpoint?
         = getCargoTarget(CargoRouteEndpoint(sourceBlock, sourceFace))
 
     private fun recalculateTarget(source: CargoRouteEndpoint): CargoRouteEndpoint? {
@@ -66,11 +68,14 @@ object CargoRoutes : Listener {
         var lastFaceUsed = source.face
         val previous = source.block.block.position
         var current = previous.getRelative(source.face)
-        val routeBlocks = mutableListOf<BlockPosition>(source.block.block.position)
-        var endpoint: CargoRouteEndpoint? = null // 42 70 -37
+        val routeBlocks = mutableListOf(source.block.block.position)
+        var endpoint: CargoRouteEndpoint? = null
 
-        while (current.chunk.isLoaded) {
+        while (current.isChunkLoaded) {
             routeBlocks.add(current)
+            for (face in IMMEDIATE_FACES) {
+                routeBlocks.add(current.getRelative(face))
+            }
             val currentBlock = BlockStorage.get(current.block)
 
             if (currentBlock is CargoDuct) {
@@ -87,7 +92,7 @@ object CargoRoutes : Listener {
                 current = current.getRelative(nextFace)
                 lastFaceUsed = nextFace
 
-            } else if (currentBlock is RebarCargoBlock) {
+            } else if (currentBlock is CargoRebarBlock) {
                 // Route endpoint found
 
                 endpoint = CargoRouteEndpoint(currentBlock, lastFaceUsed.oppositeFace)
@@ -117,19 +122,16 @@ object CargoRoutes : Listener {
         val blocks = routeBlocksCache.remove(source)
         if (blocks != null) {
             for (block in blocks) {
-                blockRoutesCache.remove(block)
+                blockRoutesCache[block]!!.remove(source)
             }
         }
         routeCache.remove(source)
     }
 
-    private fun invalidateRouteCachesForBlock(block: Block) {
-        val routes = blockRoutesCache[block.position]
-        if (routes == null) {
-            return
-        }
+    internal fun invalidateRouteCachesForBlock(block: Block) {
+        val routes = blockRoutesCache[block.position] ?: return
 
-        for (routeSource in routes) {
+        for (routeSource in routes.toList()) {
             invalidateRouteCache(routeSource)
         }
     }
@@ -152,5 +154,18 @@ object CargoRoutes : Listener {
     @EventHandler(priority = EventPriority.MONITOR)
     private fun onBlockUnloaded(event: RebarBlockUnloadEvent) {
         invalidateRouteCachesForBlock(event.block)
+    }
+
+
+    @EventHandler(priority = EventPriority.MONITOR)
+    private fun onBlockLoaded(event: RebarCargoConnectEvent) {
+        invalidateRouteCachesForBlock(event.block1.block)
+        invalidateRouteCachesForBlock(event.block2.block)
+    }
+
+    @EventHandler(priority = EventPriority.MONITOR)
+    private fun onBlockUnloaded(event: RebarCargoDisconnectEvent) {
+        invalidateRouteCachesForBlock(event.block1.block)
+        invalidateRouteCachesForBlock(event.block2.block)
     }
 }

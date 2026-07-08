@@ -2,30 +2,36 @@ package io.github.pylonmc.rebar.i18n
 
 import io.github.pylonmc.rebar.Rebar
 import io.github.pylonmc.rebar.addon.RebarAddon
-import io.github.pylonmc.rebar.config.Config
+import io.github.pylonmc.rebar.config.ConfigSection
 import io.github.pylonmc.rebar.config.adapter.ConfigAdapter
 import io.github.pylonmc.rebar.datatypes.RebarSerializers
 import io.github.pylonmc.rebar.event.RebarRegisterEvent
 import io.github.pylonmc.rebar.event.RebarUnregisterEvent
 import io.github.pylonmc.rebar.i18n.RebarTranslator.Companion.translator
+import io.github.pylonmc.rebar.item.RebarItemSchema
 import io.github.pylonmc.rebar.item.builder.ItemStackBuilder
 import io.github.pylonmc.rebar.nms.NmsAccessor
 import io.github.pylonmc.rebar.registry.RebarRegistry
 import io.github.pylonmc.rebar.util.editData
-import io.github.pylonmc.rebar.util.mergeGlobalConfig
+import io.github.pylonmc.rebar.util.mergeResource
+import io.github.pylonmc.rebar.util.persistentData
 import io.github.pylonmc.rebar.util.plainText
+import io.github.pylonmc.rebar.util.rebarKey
 import io.github.pylonmc.rebar.util.withArguments
 import io.papermc.paper.datacomponent.DataComponentTypes
 import io.papermc.paper.datacomponent.item.ItemLore
 import io.papermc.paper.datacomponent.item.ResolvableProfile
 import net.kyori.adventure.key.Key
 import net.kyori.adventure.text.*
+import net.kyori.adventure.text.format.NamedTextColor
 import net.kyori.adventure.text.format.Style
 import net.kyori.adventure.translation.GlobalTranslator
 import net.kyori.adventure.translation.Translator
 import org.apache.commons.lang3.LocaleUtils
+import org.bukkit.Bukkit
 import org.bukkit.Material
 import org.bukkit.NamespacedKey
+import org.bukkit.entity.Player
 import org.bukkit.event.EventHandler
 import org.bukkit.event.EventPriority
 import org.bukkit.event.Listener
@@ -33,8 +39,10 @@ import org.bukkit.event.player.PlayerJoinEvent
 import org.bukkit.event.player.PlayerLocaleChangeEvent
 import org.bukkit.event.player.PlayerQuitEvent
 import org.bukkit.inventory.ItemStack
+import java.io.File
 import java.text.MessageFormat
 import java.util.*
+import java.util.jar.JarFile
 import kotlin.io.path.exists
 import kotlin.io.path.listDirectoryEntries
 import kotlin.io.path.nameWithoutExtension
@@ -50,26 +58,46 @@ class RebarTranslator private constructor(private val addon: RebarAddon) : Trans
 
     private val addonNamespace = addon.key.namespace
 
-    private val translations: Map<Locale, Config>
+    private val translations: MutableMap<Locale, ConfigSection> = mutableMapOf()
 
     val languages: Set<Locale>
         get() = translations.keys
 
     private val translationCache = mutableMapOf<Pair<Locale, String>, Component>()
-    private val warned = mutableSetOf<Locale>()
 
     init {
-        for (lang in addon.languages) {
-            mergeGlobalConfig(addon, "lang/$lang.yml", "lang/$addonNamespace/$lang.yml")
-        }
+        // Copy builtin language files
+        val jarFile = JarFile(File(addon.javaClass.protectionDomain.codeSource.location.toURI()))
+        jarFile.stream()
+            .filter { it.name.startsWith("lang/") && it.name.endsWith(".yml") }
+            .map { it.name.removePrefix("lang/") }
+            .forEach { file -> mergeResource(addon, Rebar, "lang/$file", "lang/$addonNamespace/$file") }
+
+        loadTranslations()
+    }
+
+    private fun loadTranslations() {
         val langsDir = Rebar.dataPath.resolve("lang").resolve(addonNamespace)
-        translations = if (!langsDir.exists()) {
-            emptyMap()
-        } else {
-            langsDir.listDirectoryEntries("*.yml").associate {
+        if (langsDir.exists()) {
+            langsDir.listDirectoryEntries("*.yml").forEach {
                 val split = it.nameWithoutExtension.split('_', limit = 3)
-                Locale.of(split.first(), split.getOrNull(1).orEmpty(), split.getOrNull(2).orEmpty()) to Config(it)
+                val locale = Locale.of(
+                    split.first(),
+                    split.getOrNull(1).orEmpty(),
+                    split.getOrNull(2).orEmpty()
+                )
+                val config = ConfigSection.fromOrThrow(it)
+                translations[locale] = config
             }
+        }
+    }
+
+    fun reload() {
+        translationCache.clear()
+        translations.clear()
+        loadTranslations()
+        for (player in Bukkit.getOnlinePlayers()) {
+            NmsAccessor.instance.resendInventory(player)
         }
     }
 
@@ -97,6 +125,7 @@ class RebarTranslator private constructor(private val addon: RebarAddon) : Trans
                 .build()
             translation = translation.replaceText(replacer)
         }
+        translation = translation.append(component.children())
         return translation
             .children(translation.children().map { GlobalTranslator.render(it, locale) })
             .style(translation.style().merge(component.style(), Style.Merge.Strategy.IF_ABSENT_ON_TARGET))
@@ -108,23 +137,22 @@ class RebarTranslator private constructor(private val addon: RebarAddon) : Trans
             if (parts.size < 2) return null
             val (addon, key) = parts
             if (addon != addonNamespace) return null
-            val translations = findTranslations(locale) ?: return null
+            val translations = findTranslations(locale) ?: findTranslations(this.addon.defaultLanguage) ?: return null
             val translation = translations.get(key, ConfigAdapter.STRING) ?: return null
             customMiniMessage.deserialize(translation)
         }
     }
 
-    private fun findTranslations(locale: Locale): Config? {
+    private fun findTranslations(locale: Locale): ConfigSection? {
         val languageRange = languageRanges.getOrPut(locale) {
             val lookupList = LocaleUtils.localeLookupList(locale)
             lookupList.reversed()
                 .mapIndexed { index, value ->
-                    Locale.LanguageRange(value.toString().replace('_', '-'), (index + 1.0) / lookupList.size)
+                    Locale.LanguageRange(value.toLanguageTag(), (index + 1.0) / lookupList.size)
                 }
                 .sortedByDescending { it.weight }
         }
         return Locale.lookup(languageRange, this.translations.keys)?.let(translations::get)
-            ?: findTranslations(addon.languages.first())
     }
 
     override fun name(): Key = addon.key
@@ -135,42 +163,31 @@ class RebarTranslator private constructor(private val addon: RebarAddon) : Trans
 
         private val translators = mutableMapOf<NamespacedKey, RebarTranslator>()
 
-        private val wordStartRegex = Regex("""(?<=\s)""")
+        private val originalNameKey = rebarKey("translation_original_name")
+        private val originalLoreKey = rebarKey("translation_original_lore")
+        private val originalTypeKey = rebarKey("translation_original_type")
+
+        private val loreType = RebarSerializers.LIST.listTypeFrom(RebarSerializers.COMPONENT)
+
+        private val storyTextKey = rebarKey("story_text")
 
         @JvmStatic
-        fun wrapText(text: String, limit: Int): List<String> {
-            if (text.length <= limit) return listOf(text)
-            val words = text.split(wordStartRegex)
-            val lines = mutableListOf<String>()
-            var currentLine = StringBuilder()
-
-            for (word in words) {
-                if (currentLine.length + word.length > limit) {
-                    lines.add(currentLine.toString())
-                    currentLine = StringBuilder()
-                }
-                currentLine.append(word)
-            }
-            if (currentLine.isNotEmpty()) {
-                lines.add(currentLine.toString())
-            }
-            return lines
-        }
+        var Player.storyText: Boolean by persistentData(storyTextKey, RebarSerializers.BOOLEAN, true)
 
         @JvmStatic
         @get:JvmName("getTranslatorForAddon")
         val RebarAddon.translator: RebarTranslator
             get() = translators[this.key]
-                ?: error("Addon does not have a translator; did you forget to call registerWithRebar()?")
+                ?: error("Addon ${this.key} does not have a translator; did you forget to call registerWithRebar()?")
 
         /**
-         * Modifies the [ItemStack] to translate its name and lore into the specified [locale].
+         * Modifies the [ItemStack] to translate its name and lore into the locale of the specified [player].
          */
         @JvmStatic
         @JvmOverloads
         @JvmName("translateItem")
         @Suppress("UnstableApiUsage")
-        fun ItemStack.translate(locale: Locale, arguments: List<RebarArgument> = emptyList()) {
+        fun ItemStack.translate(player: Player, arguments: List<RebarArgument> = emptyList()) {
             fun isRebarOrAddon(component: Component): Boolean {
                 if (component is TranslatableComponent) {
                     for (addon in RebarRegistry.ADDONS) {
@@ -182,8 +199,12 @@ class RebarTranslator private constructor(private val addon: RebarAddon) : Trans
                 return component.children().any(::isRebarOrAddon)
             }
 
+            val locale = player.locale()
+
             editData(DataComponentTypes.ITEM_NAME) {
                 if (!isRebarOrAddon(it)) return@editData it
+
+                editPersistentDataContainer { pdc -> pdc.set(originalNameKey, RebarSerializers.COMPONENT, it) }
 
                 if (!persistentDataContainer.getOrDefault(
                         ItemStackBuilder.disableNameHacksKey,
@@ -206,7 +227,10 @@ class RebarTranslator private constructor(private val addon: RebarAddon) : Trans
                         type = Material.CLAY_BALL
                         check(type == Material.CLAY_BALL) { "ItemStack.setType no longer works" }
                         copyDataFrom(oldStack) { true }
-                        editData(DataComponentTypes.ITEM_MODEL) { oldStack.type.key }
+                        if (!oldStack.isDataOverridden(DataComponentTypes.ITEM_MODEL)) {
+                            editData(DataComponentTypes.ITEM_MODEL) { oldStack.type.key }
+                        }
+                        editPersistentDataContainer { pdc -> pdc.set(originalTypeKey, RebarSerializers.MATERIAL, oldStack.type) }
                     }
                 }
 
@@ -216,15 +240,31 @@ class RebarTranslator private constructor(private val addon: RebarAddon) : Trans
                 }
 
                 val translated = GlobalTranslator.render(it.withArguments(concatenatedArguments), locale)
-                if (translated is TranslatableComponent && translated.fallback() != null) {
+                val result = if (translated is TranslatableComponent && translated.fallback() != null) {
                     Component.text(translated.fallback()!!)
                 } else {
                     translated
                 }
 
+                // apply white color if not set
+                if (result.style().color() == null) result.color(NamedTextColor.WHITE) else result
             }
             editData(DataComponentTypes.LORE) { lore ->
-                val newLore = lore.lines().flatMap { line ->
+                val originalLore = lore.lines().toMutableList()
+
+                // Add story text to lore if this is a Rebar item with story text and player has story text enabled
+                val rebarItemSchema = RebarItemSchema.fromStack(this)
+                if (rebarItemSchema != null && player.storyText) {
+                    val storyKey = "${rebarItemSchema.key.namespace}.item.${rebarItemSchema.key.key}.story"
+                    if (translators[rebarItemSchema.addon.key]!!.canTranslate(storyKey, locale)) {
+                        if (originalLore.isNotEmpty()) {
+                            originalLore.add(Component.empty()) // newline
+                        }
+                        originalLore.add(Component.translatable(storyKey, null as String?))
+                    }
+                }
+
+                val newLore = originalLore.flatMap { line ->
                     if (!isRebarOrAddon(line)) return@flatMap listOf(line)
                     val concatenatedArguments: MutableList<TranslationArgumentLike> = arguments.toMutableList()
                     if (line is TranslatableComponent) {
@@ -236,7 +276,44 @@ class RebarTranslator private constructor(private val addon: RebarAddon) : Trans
                         wrapLine(it)
                     }
                 }
+
+                if (originalLore == newLore) {
+                    return
+                }
+
+                editPersistentDataContainer { pdc -> pdc.set(originalLoreKey, loreType, originalLore) }
+                check(newLore.size <= 256) {
+                    "Lore for item had too many lines ($locale) (256 lines max but had ${newLore.size}): ${newLore.map { it.plainText }}\\n"
+                }
                 ItemLore.lore(newLore)
+            }
+        }
+
+        /**
+         * Reverts any changes made to the item by the [translate] method
+         */
+        @JvmStatic
+        @JvmName("translateItem")
+        @Suppress("UnstableApiUsage")
+        fun ItemStack.untranslate() {
+            val originalName = persistentDataContainer.get(originalNameKey, RebarSerializers.COMPONENT)
+            val originalLore = persistentDataContainer.get(originalLoreKey, loreType)
+            val originalType = persistentDataContainer.get(originalTypeKey, RebarSerializers.MATERIAL)
+            if (originalName != null) {
+                setData(DataComponentTypes.ITEM_NAME, originalName)
+                editPersistentDataContainer { pdc -> pdc.remove(originalNameKey) }
+            }
+            if (originalLore != null) {
+                setData(DataComponentTypes.LORE, ItemLore.lore(originalLore))
+                editPersistentDataContainer { pdc -> pdc.remove(originalLoreKey) }
+            }
+            if (originalType != null) {
+                val oldStack = clone()
+                @Suppress("DEPRECATION")
+                type = originalType
+                check(type == originalType) { "ItemStack.setType no longer works" }
+                copyDataFrom(oldStack) { true }
+                editPersistentDataContainer { pdc -> pdc.remove(originalTypeKey) }
             }
         }
 

@@ -7,9 +7,15 @@ import io.github.pylonmc.rebar.config.RebarConfig
 import io.github.pylonmc.rebar.datatypes.RebarSerializers
 import io.github.pylonmc.rebar.entity.EntityStorage
 import io.github.pylonmc.rebar.entity.RebarEntity
+import io.github.pylonmc.rebar.event.RebarBlockBreakEvent
+import io.github.pylonmc.rebar.event.RebarBlockPhantomEvent
+import io.github.pylonmc.rebar.event.RebarBlockUnloadEvent
 import io.github.pylonmc.rebar.event.RebarBlockWailaEvent
+import io.github.pylonmc.rebar.event.RebarEntityRemoveEvent
+import io.github.pylonmc.rebar.event.RebarEntityUnloadEvent
 import io.github.pylonmc.rebar.event.RebarEntityWailaEvent
 import io.github.pylonmc.rebar.i18n.RebarArgument
+import io.github.pylonmc.rebar.util.breakProgress
 import io.github.pylonmc.rebar.util.delayTicks
 import io.github.pylonmc.rebar.util.position.BlockPosition
 import io.github.pylonmc.rebar.util.position.position
@@ -20,9 +26,12 @@ import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
 import net.kyori.adventure.bossbar.BossBar
 import net.kyori.adventure.text.Component
+import org.bukkit.Bukkit
+import org.bukkit.Location
 import org.bukkit.attribute.Attribute
 import org.bukkit.block.Block
 import org.bukkit.entity.Entity
+import org.bukkit.entity.Item
 import org.bukkit.entity.Player
 import org.bukkit.event.EventHandler
 import org.bukkit.event.EventPriority
@@ -41,7 +50,12 @@ import kotlin.math.pow
  * [RebarBlock.getWaila] and [RebarEntity.getWaila], if you need to change the WAILA
  * display for a different block/entity, see [addWailaOverride].
  */
-class Waila private constructor(private val player: Player, playerConfig: PlayerWailaConfig, private val job: Job) {
+class Waila private constructor(
+    private val player: Player,
+    playerConfig: PlayerWailaConfig,
+    private val updateContentsJob: Job,
+    private val updateTargetJob: Job,
+) {
 
     private var config = playerConfig
         set(value) {
@@ -58,21 +72,40 @@ class Waila private constructor(private val player: Player, playerConfig: Player
         RebarConfig.WailaConfig.DEFAULT_DISPLAY.overlay
     )
 
+    private var playerEyeLocationAtLastTargetUpdate: Location? = null
+
+    // always null if targetEntity is not null
+    private var targetBlock: BlockPosition? = null
+
+    // always null if targetBlock is not null
+    private var targetEntity: UUID? = null
+
+    var lastText: Component? = null
+        private set
+    var lastColor: BossBar.Color? = null
+        private set
+    var lastOverlay: BossBar.Overlay? = null
+        private set
+    var lastProgress: Float? = null
+        private set
+
+    private var wasVisible = false
+
     private fun send(display: WailaDisplay) {
+        val color = if (display.color in RebarConfig.WailaConfig.ALLOWED_BOSS_BAR_COLORS) {
+            display.color
+        } else {
+            RebarConfig.WailaConfig.DEFAULT_DISPLAY.color
+        }
+        val overlay = if (display.overlay in RebarConfig.WailaConfig.ALLOWED_BOSS_BAR_OVERLAYS) {
+            display.overlay
+        } else {
+            RebarConfig.WailaConfig.DEFAULT_DISPLAY.overlay
+        }
+
         when (config.type) {
             Type.BOSSBAR -> {
                 player.hideBossBar(bossBar)
-                val color = if (display.color in RebarConfig.WailaConfig.ALLOWED_BOSS_BAR_COLORS) {
-                    display.color
-                } else {
-                    RebarConfig.WailaConfig.DEFAULT_DISPLAY.color
-                }
-                val overlay = if (display.overlay in RebarConfig.WailaConfig.ALLOWED_BOSS_BAR_OVERLAYS) {
-                    display.overlay
-                } else {
-                    RebarConfig.WailaConfig.DEFAULT_DISPLAY.overlay
-                }
-
                 bossBar.name(display.text)
                 bossBar.color(color)
                 bossBar.overlay(overlay)
@@ -81,25 +114,41 @@ class Waila private constructor(private val player: Player, playerConfig: Player
             }
             Type.ACTIONBAR -> player.sendActionBar(display.text)
         }
+
+        lastText = display.text
+        lastColor = color
+        lastOverlay = overlay
+        lastProgress = display.progress
+        wasVisible = true
     }
 
     private fun hide() {
+        if (!wasVisible) {
+            return
+        }
+
         when (config.type) {
-            Type.BOSSBAR -> {
-                if (player.activeBossBars().contains(bossBar)) {
-                    player.hideBossBar(bossBar)
-                }
-            }
+            Type.BOSSBAR -> player.hideBossBar(bossBar)
             Type.ACTIONBAR -> player.sendActionBar(Component.empty())
         }
+        lastText = null
+        lastColor = null
+        lastOverlay = null
+        lastProgress = null
+        wasVisible = false
     }
 
     private fun destroy() {
         hide()
-        job.cancel()
+        updateContentsJob.cancel()
+        updateTargetJob.cancel()
     }
 
-    private fun updateDisplay() {
+    // Note: Raytracing is quite expensive especially when done frequently, so we try to
+    // limit target recalculation as much as possible
+    private fun updateTarget() {
+        playerEyeLocationAtLastTargetUpdate = player.eyeLocation
+
         val entityReach = player.getAttribute(Attribute.ENTITY_INTERACTION_RANGE)?.value ?: 3.0
         val blockReach = player.getAttribute(Attribute.BLOCK_INTERACTION_RANGE)?.value ?: 4.5
 
@@ -120,18 +169,43 @@ class Waila private constructor(private val player: Player, playerConfig: Player
             builder.targets(RayTraceTarget.ENTITY, RayTraceTarget.BLOCK)
         }
 
-        if (rayTraceResult == null) {
-            hide()
-            return
+        this.targetEntity = null
+        this.targetBlock = null
+
+        rayTraceResult?.hitEntity?.let { entity ->
+            if (entity.isValid) {
+                this.targetEntity = entity.uniqueId
+            }
+        }
+        rayTraceResult?.hitBlock?.let { block ->
+            if (!block.isEmpty) { // Not sure this is possible, but just in case
+                this.targetBlock = block.position
+            }
         }
 
-        rayTraceResult.hitEntity?.let { entity ->
+        updateContents()
+    }
+
+    private fun updateContents() {
+        if (targetEntity != null) {
             try {
-                var display = entityOverrides[entity.uniqueId]?.invoke(player)
+                val entity = Bukkit.getEntity(targetEntity!!)
+                if (entity == null || !entity.isValid) {
+                    targetEntity = null
+                    updateTarget()
+                    hide()
+                    return
+                }
+
+                var display = entityOverrides[targetEntity]?.getWaila(player)
                     ?: entity.let(EntityStorage::get)?.getWaila(player)
 
                 if (display == null && player.wailaConfig.vanillaWailaEnabled) {
-                    display = WailaDisplay(Component.translatable(entity.type.translationKey()))
+                    display = if (entity is Item) {
+                        WailaDisplay.of(entity.itemStack.effectiveName())
+                    } else {
+                        WailaDisplay.of(Component.translatable(entity.type.translationKey()))
+                    }
                 }
 
                 if (display != null) {
@@ -149,15 +223,29 @@ class Waila private constructor(private val player: Player, playerConfig: Player
                 e.printStackTrace()
                 hide()
             }
-        }
-
-        rayTraceResult.hitBlock?.let { block ->
+        } else if (targetBlock != null) {
             try {
-                var display = blockOverrides[block.position]?.invoke(player)
+                val block = targetBlock!!.block
+
+                if (block.isEmpty) {
+                    targetBlock = null
+                    updateTarget()
+                    hide()
+                    return
+                }
+
+                var display = blockOverrides[targetBlock]?.getWaila(player)
                     ?: block.let(BlockStorage::get)?.getWaila(player)
 
-                if (display == null && player.wailaConfig.vanillaWailaEnabled) {
-                    display = WailaDisplay(Component.translatable(block.type.translationKey()))
+                if (!BlockStorage.isRebarBlock(block) && display == null && player.wailaConfig.vanillaWailaEnabled) {
+                    val name = Component.translatable(block.type.translationKey())
+                    val prefix = WailaDisplay.getWailaBlockPrefix(block, player)
+                    display = if (prefix != null) {
+                        WailaDisplay.of(prefix).add(name)
+                    } else {
+                        WailaDisplay.of(name)
+                    }
+                    display = display.progress(1.0F - block.breakProgress)
                 }
 
                 if (display != null) {
@@ -175,6 +263,8 @@ class Waila private constructor(private val player: Player, playerConfig: Player
                 e.printStackTrace()
                 hide()
             }
+        } else {
+            hide()
         }
     }
 
@@ -188,8 +278,13 @@ class Waila private constructor(private val player: Player, playerConfig: Player
         private val wailaKey = rebarKey("waila")
         private val wailas = mutableMapOf<UUID, Waila>()
 
-        private val blockOverrides = mutableMapOf<BlockPosition, (Player) -> WailaDisplay?>()
-        private val entityOverrides = mutableMapOf<UUID, (Player) -> WailaDisplay?>()
+        private val blockOverrides = mutableMapOf<BlockPosition, WailaSupplier>()
+        private val entityOverrides = mutableMapOf<UUID, WailaSupplier>()
+
+        @JvmStatic
+        fun getWaila(player: Player): Waila? {
+            return wailas[player.uniqueId]
+        }
 
         /**
          * Forcibly adds a WAILA display for the given player.
@@ -200,14 +295,33 @@ class Waila private constructor(private val player: Player, playerConfig: Player
                 return
             }
 
-            wailas[player.uniqueId] = Waila(player, config, Rebar.scope.launch {
+            val updateContentsJob = Rebar.scope.launch {
                 delayTicks(1)
                 val waila = wailas[player.uniqueId]!!
                 while (true) {
-                    waila.updateDisplay()
-                    delayTicks(RebarConfig.WailaConfig.TICK_INTERVAL.toLong())
+                    waila.updateContents()
+                    delayTicks(RebarConfig.WailaConfig.CONTENTS_TICK_INTERVAL.toLong())
                 }
-            })
+            }
+
+            val updateTargetJob = Rebar.scope.launch {
+                delayTicks(1)
+                val waila = wailas[player.uniqueId]!!
+                while (true) {
+                    waila.updateTarget()
+
+                    // Delay for at most TARGET_TICK_INTERVAL * STATIONARY_TARGET_TICK_INTERVAL_MULTIPLIER ticks,
+                    // until the player moves their eyes
+                    for (i in 0..<RebarConfig.WailaConfig.STATIONARY_TARGET_TICK_INTERVAL_MULTIPLIER) {
+                        delayTicks(RebarConfig.WailaConfig.TARGET_TICK_INTERVAL.toLong())
+                        if (waila.playerEyeLocationAtLastTargetUpdate != player.eyeLocation) {
+                            break
+                        }
+                    }
+                }
+            }
+
+            wailas[player.uniqueId] = Waila(player, config, updateContentsJob, updateTargetJob)
         }
 
         /**
@@ -252,8 +366,8 @@ class Waila private constructor(private val player: Player, playerConfig: Player
          * old override will be replaced.
          */
         @JvmStatic
-        fun addWailaOverride(position: BlockPosition, provider: (Player) -> WailaDisplay?) {
-            blockOverrides[position] = provider
+        fun addWailaOverride(position: BlockPosition, supplier: WailaSupplier) {
+            blockOverrides[position] = supplier
         }
 
         /**
@@ -266,8 +380,8 @@ class Waila private constructor(private val player: Player, playerConfig: Player
          * old override will be replaced.
          */
         @JvmStatic
-        fun addWailaOverride(block: Block, provider: (Player) -> WailaDisplay?)
-                = addWailaOverride(block.position, provider)
+        fun addWailaOverride(block: Block, supplier: WailaSupplier)
+                = addWailaOverride(block.position, supplier)
 
         /**
          * Adds a WAILA override for the given entity. This will always show the
@@ -278,8 +392,8 @@ class Waila private constructor(private val player: Player, playerConfig: Player
          * old override will be replaced.
          */
         @JvmStatic
-        fun addWailaOverride(entity: Entity, provider: (Player) -> WailaDisplay?) {
-            entityOverrides[entity.uniqueId] = provider
+        fun addWailaOverride(entity: Entity, supplier: WailaSupplier) {
+            entityOverrides[entity.uniqueId] = supplier
         }
 
         /**
@@ -316,6 +430,41 @@ class Waila private constructor(private val player: Player, playerConfig: Player
         @EventHandler(priority = EventPriority.MONITOR)
         private fun onPlayerQuit(event: PlayerQuitEvent) {
             removePlayer(event.player)
+        }
+
+        private fun removeOverrides(block: RebarBlock) {
+            blockOverrides.values.removeIf { it === block }
+            entityOverrides.values.removeIf { it === block }
+        }
+
+        private fun removeOverrides(entity: RebarEntity<*>) {
+            blockOverrides.values.removeIf { it === entity }
+            entityOverrides.values.removeIf { it === entity }
+        }
+
+        @EventHandler(priority = EventPriority.MONITOR)
+        private fun onBlockBreak(event: RebarBlockBreakEvent) {
+            removeOverrides(event.rebarBlock)
+        }
+
+        @EventHandler(priority = EventPriority.MONITOR)
+        private fun onBlockUnload(event: RebarBlockUnloadEvent) {
+            removeOverrides(event.rebarBlock)
+        }
+
+        @EventHandler(priority = EventPriority.MONITOR)
+        private fun onBlockPhantom(event: RebarBlockPhantomEvent) {
+            removeOverrides(event.rebarBlock)
+        }
+
+        @EventHandler(priority = EventPriority.MONITOR)
+        private fun onEntityRemove(event: RebarEntityRemoveEvent) {
+            removeOverrides(event.rebarEntity)
+        }
+
+        @EventHandler(priority = EventPriority.MONITOR)
+        private fun onEntityUnload(event: RebarEntityUnloadEvent) {
+            removeOverrides(event.rebarEntity)
         }
     }
 }

@@ -5,11 +5,12 @@ import com.github.benmanes.caffeine.cache.Cache
 import com.github.benmanes.caffeine.cache.Caffeine
 import io.github.pylonmc.rebar.Rebar
 import io.github.pylonmc.rebar.block.RebarBlock
-import io.github.pylonmc.rebar.block.base.RebarCulledBlock
-import io.github.pylonmc.rebar.block.base.RebarGroupCulledBlock
+import io.github.pylonmc.rebar.block.interfaces.CulledRebarBlock
+import io.github.pylonmc.rebar.block.interfaces.GroupCulledRebarBlock
 import io.github.pylonmc.rebar.config.RebarConfig
 import io.github.pylonmc.rebar.culling.PlayerCullingJob.Companion.cullingBoundingBox
 import io.github.pylonmc.rebar.datatypes.RebarSerializers
+import io.github.pylonmc.rebar.nms.NmsAccessor
 import io.github.pylonmc.rebar.util.Octree
 import io.github.pylonmc.rebar.util.delayTicks
 import io.github.pylonmc.rebar.util.pdc
@@ -40,6 +41,7 @@ import org.bukkit.event.world.WorldLoadEvent
 import org.bukkit.event.world.WorldUnloadEvent
 import org.bukkit.util.BoundingBox
 import org.bukkit.util.Vector
+import org.jetbrains.annotations.ApiStatus
 import java.lang.invoke.MethodHandles
 import java.time.Duration
 import java.util.UUID
@@ -61,12 +63,13 @@ object BlockCullingEngine : Listener {
 
     internal val occludingCache = mutableMapOf<UUID, MutableMap<Long, ChunkData>>()
 
-    internal val blockTextureOctrees = mutableMapOf<UUID, Octree<RebarBlock>>()
-    internal  val culledBlockOctrees = mutableMapOf<UUID, Octree<RebarBlock>>()
+    @JvmSynthetic @ApiStatus.Internal
+    val blockTextureOctrees = mutableMapOf<UUID, Octree<RebarBlock>>()
+    internal val culledBlockOctrees = mutableMapOf<UUID, Octree<RebarBlock>>()
 
-    private val jobs = mutableMapOf<UUID, Job>()
-    internal val syncJobTasks = ConcurrentHashMap<UUID, MutableMap<RebarCulledBlock, Boolean>>()
-    internal val syncJobGroupTasks = ConcurrentHashMap<UUID, MutableMap<RebarGroupCulledBlock, MutableMap<RebarGroupCulledBlock.CullingGroup, Boolean>>>()
+    private val jobs = mutableMapOf<UUID, Pair<PlayerCullingJob, Job>>()
+    internal val syncJobTasks = ConcurrentHashMap<UUID, MutableMap<CulledRebarBlock, Boolean>>()
+    internal val syncJobGroupTasks = ConcurrentHashMap<UUID, MutableMap<GroupCulledRebarBlock, MutableMap<GroupCulledRebarBlock.CullingGroup, Boolean>>>()
 
     /**
      * Periodically invalidates a share of the occluding cache, to ensure stale data isn't perpetuated.
@@ -158,7 +161,7 @@ object BlockCullingEngine : Listener {
             this.pdc.set(cullingEnabledKey, RebarSerializers.BOOLEAN, actualValue)
             if (!actualValue) {
                 getOctree(this.world, culledBlockOctrees).query(cullingBoundingBox).forEach { block ->
-                    (block as? RebarCulledBlock)?.onVisible(this)
+                    (block as? CulledRebarBlock)?.onVisible(this)
                 }
             }
         }
@@ -193,7 +196,7 @@ object BlockCullingEngine : Listener {
         if (RebarConfig.BlockTextureConfig.ENABLED && !block.disableBlockTextureEntity) {
             getOctree(block.block.world, blockTextureOctrees).insert(block)
         }
-        if (block is RebarCulledBlock) {
+        if (block is CulledRebarBlock) {
             getOctree(block.block.world, culledBlockOctrees).insert(block)
         }
     }
@@ -205,7 +208,7 @@ object BlockCullingEngine : Listener {
             getOctree(block.block.world, blockTextureOctrees).remove(block)
             block.blockTextureEntity?.removeAllViewers()
         }
-        if (block is RebarCulledBlock) {
+        if (block is CulledRebarBlock) {
             getOctree(block.block.world, culledBlockOctrees).remove(block)
         }
     }
@@ -235,10 +238,10 @@ object BlockCullingEngine : Listener {
     @JvmSynthetic
     internal fun launchCullingJob(player: Player) {
         val playerId = player.uniqueId
-        if (!RebarConfig.CullingEngineConfig.ENABLED || jobs.containsKey(playerId)) return
+        if (!RebarConfig.CullingEngineConfig.ENABLED || jobs.containsKey(playerId) || !player.isValid) return
 
-        jobs[playerId] = Rebar.scope.launch(Dispatchers.Default) {
-            val job = PlayerCullingJob(playerId)
+        val job = PlayerCullingJob(playerId)
+        jobs[playerId] = job to Rebar.scope.launch(Dispatchers.Default) {
             while (true) {
                 job.run()
             }
@@ -246,9 +249,15 @@ object BlockCullingEngine : Listener {
     }
 
     @JvmSynthetic
+    internal fun hasCullingJob(playerId: UUID): Boolean = jobs.containsKey(playerId)
+
+    @JvmSynthetic @ApiStatus.Internal
+    fun getCullingJob(playerId: UUID): PlayerCullingJob? = jobs[playerId]?.first
+
+    @JvmSynthetic
     internal fun stopCullingJob(playerId: UUID) {
+        jobs.remove(playerId)?.second?.cancel()
         blockTextureOctrees.values.forEach { it.allEntries().forEach { b -> b.blockTextureEntity?.removeViewer(playerId) } }
-        jobs.remove(playerId)?.cancel()
     }
 
     @EventHandler(priority = EventPriority.MONITOR)
@@ -276,7 +285,7 @@ object BlockCullingEngine : Listener {
 
     @EventHandler(priority = EventPriority.MONITOR)
     private fun onPlayerJoin(event: PlayerJoinEvent) {
-        launchCullingJob(event.player)
+        Bukkit.getScheduler().runTaskLater(Rebar, { -> launchCullingJob(event.player) }, 20L)
     }
 
     @EventHandler(priority = EventPriority.MONITOR)
@@ -340,13 +349,13 @@ object BlockCullingEngine : Listener {
             .expireAfterAccess(Duration.ofMinutes(1))
             .build()
     ) {
-        fun insert(block: Block, isOccluding: Boolean = block.blockData.isOccluding) {
-            occluding.put(BlockPosition.asLong(block.x, block.y, block.z), isOccluding)
+        fun insert(block: Block, isOccluding: Boolean = NmsAccessor.instance.isOccluding(block)) {
+            occluding.put(BlockPosition.asLong(block), isOccluding)
         }
 
         fun isOccluding(world: World, blockX: Int, blockY: Int, blockZ: Int): Boolean {
             return occluding.get(BlockPosition.asLong(blockX, blockY, blockZ)) {
-                world.getBlockAt(blockX, blockY, blockZ).blockData.isOccluding
+                NmsAccessor.instance.isOccluding(world.getBlockAt(blockX, blockY, blockZ))
             }
         }
     }

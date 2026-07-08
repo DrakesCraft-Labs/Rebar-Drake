@@ -1,8 +1,8 @@
 package io.github.pylonmc.rebar.test.block.fluid;
 
 import io.github.pylonmc.rebar.block.RebarBlock;
-import io.github.pylonmc.rebar.block.base.RebarFluidBufferBlock;
-import io.github.pylonmc.rebar.block.base.RebarUnloadBlock;
+import io.github.pylonmc.rebar.block.interfaces.FluidBufferRebarBlock;
+import io.github.pylonmc.rebar.block.interfaces.UnloadRebarBlockHandler;
 import io.github.pylonmc.rebar.block.context.BlockCreateContext;
 import io.github.pylonmc.rebar.datatypes.RebarSerializers;
 import io.github.pylonmc.rebar.event.RebarBlockUnloadEvent;
@@ -11,7 +11,7 @@ import io.github.pylonmc.rebar.fluid.FluidPointType;
 import io.github.pylonmc.rebar.fluid.RebarFluid;
 import io.github.pylonmc.rebar.fluid.VirtualFluidPoint;
 import io.github.pylonmc.rebar.test.RebarTest;
-import io.github.pylonmc.rebar.test.fluid.Fluids;
+import io.github.pylonmc.rebar.test.fluid.TestFluids;
 import lombok.Getter;
 import org.bukkit.NamespacedKey;
 import org.bukkit.block.Block;
@@ -21,7 +21,7 @@ import org.jetbrains.annotations.NotNull;
 import java.util.Map;
 
 
-public class FluidConsumer extends RebarBlock implements RebarFluidBufferBlock, RebarUnloadBlock {
+public class FluidConsumer extends RebarBlock implements FluidBufferRebarBlock, UnloadRebarBlockHandler {
 
     public static final NamespacedKey LAVA_CONSUMER_KEY = RebarTest.key("lava_consumer");
     public static final NamespacedKey WATER_CONSUMER_KEY = RebarTest.key("water_consumer");
@@ -63,8 +63,8 @@ public class FluidConsumer extends RebarBlock implements RebarFluidBufferBlock, 
 
     private RebarFluid getFluidType() {
         return Map.of(
-                LAVA_CONSUMER_KEY, Fluids.LAVA,
-                WATER_CONSUMER_KEY, Fluids.WATER
+                LAVA_CONSUMER_KEY, TestFluids.LAVA,
+                WATER_CONSUMER_KEY, TestFluids.WATER
         ).get(getKey());
     }
 }

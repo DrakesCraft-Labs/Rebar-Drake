@@ -11,22 +11,24 @@ import org.bukkit.entity.Display.Brightness
 import org.bukkit.entity.ItemDisplay
 import org.bukkit.inventory.ItemStack
 import org.joml.Matrix4f
+import java.util.function.Consumer
 
 
 @Suppress("unused")
 open class ItemDisplayBuilder() {
 
-    var itemStack: ItemStack? = null
-    var itemDisplayTransform : ItemDisplay.ItemDisplayTransform? = null
-    var transformation: Matrix4f? = null
-    var brightness: Brightness? = null
-    var glowColor: Color? = null
-    var billboard: Billboard? = null
-    var viewRange: Float? = null
-    var interpolationDelay: Int? = null
-    var interpolationDuration: Int? = null
-    var displayWidth: Float? = null
-    var displayHeight: Float? = null
+    protected var itemStack: ItemStack? = null
+    protected var itemDisplayTransform : ItemDisplay.ItemDisplayTransform? = null
+    protected var transformation: Matrix4f? = null
+    protected var brightness: Brightness? = null
+    protected var glowColor: Color? = null
+    protected var billboard: Billboard? = null
+    protected var viewRange: Float? = null
+    protected var interpolationDelay: Int? = null
+    protected var interpolationDuration: Int? = null
+    protected var displayWidth: Float? = null
+    protected var displayHeight: Float? = null
+    protected var persistent: Boolean? = null
 
     constructor(other: ItemDisplayBuilder): this() {
         this.itemStack = other.itemStack
@@ -40,14 +42,16 @@ open class ItemDisplayBuilder() {
         this.interpolationDuration = other.interpolationDuration
         this.displayWidth = other.displayWidth
         this.displayHeight = other.displayHeight
+        this.persistent = other.persistent
     }
 
-    fun material(material: Material) = apply { this.itemStack = ItemStack(material) }
+    fun material(material: Material) = apply { this.itemStack = ItemStack.of(material) }
     fun itemStack(itemStack: ItemStack?) = apply { this.itemStack = itemStack }
     fun itemStack(builder: ItemStackBuilder) = apply { this.itemStack = builder.build() }
     fun itemDisplayTransform(itemDisplayTransform: ItemDisplay.ItemDisplayTransform?) = apply { this.itemDisplayTransform = itemDisplayTransform }
     fun transformation(transformation: Matrix4f?) = apply { this.transformation = transformation }
     fun transformation(builder: TransformBuilder) = apply { this.transformation = builder.buildForItemDisplay() }
+    fun transformation(builder: Consumer<TransformBuilder>) = transformation(TransformBuilder().apply(builder::accept).build())
     fun brightness(brightness: Brightness) = apply { this.brightness = brightness }
     fun brightness(brightness: Int) = brightness(Brightness(0, brightness))
     fun glow(glowColor: Color?)  = apply { this.glowColor = glowColor }
@@ -57,6 +61,7 @@ open class ItemDisplayBuilder() {
     fun interpolationDuration(interpolationDuration: Int) = apply { this.interpolationDuration = interpolationDuration }
     fun displayWidth(displayWidth: Float): ItemDisplayBuilder = apply { this.displayWidth = displayWidth }
     fun displayHeight(displayHeight: Float): ItemDisplayBuilder = apply { this.displayHeight = displayHeight }
+    fun persistent(persistent: Boolean): ItemDisplayBuilder = apply { this.persistent = persistent }
 
     open fun build(location: Location): ItemDisplay {
         val finalLocation = location.clone()
@@ -102,6 +107,9 @@ open class ItemDisplayBuilder() {
         }
         if (displayHeight != null) {
             display.displayWidth = displayHeight!!
+        }
+        if (persistent != null) {
+            display.isPersistent = persistent!!
         }
     }
 }

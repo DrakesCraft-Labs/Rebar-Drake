@@ -13,13 +13,12 @@ import org.bukkit.Keyed
 import org.bukkit.NamespacedKey
 import java.util.concurrent.CompletableFuture
 
-@Suppress("UnstableApiUsage")
 class RegistryCommandArgument<T : Keyed>(private val registry: RebarRegistry<T>) :
     CustomArgumentType.Converted<T, NamespacedKey> {
 
     @Suppress("PrivatePropertyName")
     private val ERROR_UNKNOWN = DynamicCommandExceptionType {
-        MessageComponentSerializer.message().serialize(Component.text("Unknown key in ${registry.key}: $it"))
+        MessageComponentSerializer.message().serialize(Component.text("Unknown key: $it"))
     }
 
     override fun convert(nativeType: NamespacedKey): T {

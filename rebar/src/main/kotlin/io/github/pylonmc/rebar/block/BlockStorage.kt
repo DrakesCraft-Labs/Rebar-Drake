@@ -4,7 +4,7 @@ package io.github.pylonmc.rebar.block
 import io.github.pylonmc.rebar.Rebar
 import io.github.pylonmc.rebar.addon.RebarAddon
 import io.github.pylonmc.rebar.block.BlockStorage.breakBlock
-import io.github.pylonmc.rebar.block.base.RebarBreakHandler
+import io.github.pylonmc.rebar.block.interfaces.BlockBreakRebarBlockHandler
 import io.github.pylonmc.rebar.block.context.BlockBreakContext
 import io.github.pylonmc.rebar.block.context.BlockCreateContext
 import io.github.pylonmc.rebar.config.RebarConfig
@@ -13,9 +13,11 @@ import io.github.pylonmc.rebar.datatypes.RebarSerializers
 import io.github.pylonmc.rebar.event.*
 import io.github.pylonmc.rebar.registry.RebarRegistry
 import io.github.pylonmc.rebar.util.delayTicks
+import io.github.pylonmc.rebar.util.isChunkLoaded
 import io.github.pylonmc.rebar.util.isFromAddon
 import io.github.pylonmc.rebar.util.position.BlockPosition
 import io.github.pylonmc.rebar.util.position.ChunkPosition
+import io.github.pylonmc.rebar.util.position.chunkPosition
 import io.github.pylonmc.rebar.util.position.position
 import io.github.pylonmc.rebar.util.rebarKey
 import kotlinx.coroutines.Job
@@ -30,7 +32,6 @@ import org.bukkit.event.world.ChunkLoadEvent
 import org.bukkit.event.world.ChunkUnloadEvent
 import org.bukkit.inventory.ItemStack
 import org.bukkit.persistence.PersistentDataContainer
-import org.bukkit.persistence.PersistentDataType
 import java.util.Collections
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.locks.ReentrantReadWriteLock
@@ -66,6 +67,7 @@ import kotlin.random.Random
 object BlockStorage : Listener {
 
     val rebarBlocksKey = rebarKey("blocks")
+    val rebarBlocksType = RebarSerializers.LIST.listTypeFrom(RebarSerializers.TAG_CONTAINER)
 
     // Access to blocks, blocksByChunk, blocksById fields must be synchronized
     // to prevent them briefly going out of sync
@@ -76,21 +78,21 @@ object BlockStorage : Listener {
     // Only contains chunks that have been loaded (including chunks with no Rebar blocks)
     private val blocksByChunk: MutableMap<ChunkPosition, MutableList<RebarBlock>> = ConcurrentHashMap()
 
-    private val blocksByKey: MutableMap<NamespacedKey, MutableList<RebarBlock>> = ConcurrentHashMap()
+    private val blocksBySchema: MutableMap<RebarBlockSchema, MutableList<RebarBlock>> = ConcurrentHashMap()
 
     private val chunkAutosaveTasks: MutableMap<ChunkPosition, Job> = ConcurrentHashMap()
 
     @JvmStatic
     val loadedBlockPositions: Set<BlockPosition>
-        get() = lockBlockRead { blocks.keys }
+        get() = lockBlockRead { blocks.keys.toSet() }
 
     @JvmStatic
     val loadedChunks: Set<ChunkPosition>
-        get() = lockBlockRead { blocksByChunk.keys }
+        get() = lockBlockRead { blocksByChunk.keys.toSet() }
 
     @JvmStatic
     val loadedRebarBlocks: Collection<RebarBlock>
-        get() = lockBlockRead { blocks.values }
+        get() = lockBlockRead { blocks.values.toSet() }
 
     /**
      * Returns the Rebar block at the given [blockPosition], or null if the block does not exist
@@ -98,8 +100,9 @@ object BlockStorage : Listener {
      * @throws IllegalArgumentException if the chunk containing the block is not loaded
      */
     @JvmStatic
-    fun get(blockPosition: BlockPosition): RebarBlock? {
-        require(blockPosition.chunk.isLoaded) { "You can only get Rebar blocks in loaded chunks" }
+    fun get(blockPosition: BlockPosition?): RebarBlock? {
+        if (blockPosition == null) return null
+        require(blockPosition.isChunkLoaded) { "You can only get Rebar blocks in loaded chunks" }
         return lockBlockRead { blocks[blockPosition] }
     }
 
@@ -109,7 +112,7 @@ object BlockStorage : Listener {
      * @throws IllegalArgumentException if the chunk containing the block is not loaded
      */
     @JvmStatic
-    fun get(block: Block): RebarBlock? = get(block.position)
+    fun get(block: Block?): RebarBlock? = block?.let { get(it.position) }
 
     /**
      * Returns the Rebar block at the given [location], or null if the block does not exist.
@@ -117,7 +120,7 @@ object BlockStorage : Listener {
      * @throws IllegalArgumentException if the chunk containing the block is not loaded
      */
     @JvmStatic
-    fun get(location: Location): RebarBlock? = get(location.block)
+    fun get(location: Location?): RebarBlock? = location?.let { get(it.block) }
 
     /**
      * Returns the Rebar block (of type [T]) at the given [blockPosition], or null if the block
@@ -126,7 +129,7 @@ object BlockStorage : Listener {
      * @throws IllegalArgumentException if the chunk containing the block is not loaded
      */
     @JvmStatic
-    fun <T> getAs(clazz: Class<T>, blockPosition: BlockPosition): T? {
+    fun <T> getAs(clazz: Class<T>, blockPosition: BlockPosition?): T? {
         val block = get(blockPosition) ?: return null
         if (!clazz.isInstance(block)) {
             return null
@@ -141,7 +144,7 @@ object BlockStorage : Listener {
      * @throws IllegalArgumentException if the chunk containing the block is not loaded
      */
     @JvmStatic
-    fun <T> getAs(clazz: Class<T>, block: Block): T? = getAs(clazz, block.position)
+    fun <T> getAs(clazz: Class<T>, block: Block?): T? = block?.let { getAs(clazz, it.position) }
 
     /**
      * Returns the Rebar block (of type [T]) at the given [location], or null if the block
@@ -150,8 +153,7 @@ object BlockStorage : Listener {
      * @throws IllegalArgumentException if the chunk containing the block is not loaded
      */
     @JvmStatic
-    fun <T> getAs(clazz: Class<T>, location: Location): T? =
-        getAs(clazz, BlockPosition(location))
+    fun <T> getAs(clazz: Class<T>, location: Location?): T? = location?.let { getAs(clazz, BlockPosition(it)) }
 
     /**
      * Gets the Rebar block (of type [T]) at the given [blockPosition].
@@ -160,7 +162,7 @@ object BlockStorage : Listener {
      *
      * @throws IllegalArgumentException if the chunk containing the block is not loaded
      */
-    inline fun <reified T> getAs(blockPosition: BlockPosition): T? =
+    inline fun <reified T> getAs(blockPosition: BlockPosition?): T? =
         getAs(T::class.java, blockPosition)
 
     /**
@@ -170,7 +172,7 @@ object BlockStorage : Listener {
      *
      * @throws IllegalArgumentException if the chunk containing the block is not loaded
      */
-    inline fun <reified T> getAs(block: Block): T? = getAs(T::class.java, block)
+    inline fun <reified T> getAs(block: Block?): T? = getAs(T::class.java, block)
 
     /**
      * Returns the Rebar block (of type [T]) at the given [location].
@@ -179,31 +181,41 @@ object BlockStorage : Listener {
      *
      * @throws IllegalArgumentException if the chunk containing the block is not loaded
      */
-    inline fun <reified T> getAs(location: Location): T? = getAs(T::class.java, location)
+    inline fun <reified T> getAs(location: Location?): T? = getAs(T::class.java, location)
 
     /**
-     * Returns all the Plyon blocks in the chunk at [chunkPosition].
+     * Returns all the Rebar blocks in the chunk at [chunkPosition].
      *
      * @throws IllegalArgumentException if the chunk is not loaded
      */
     @JvmStatic
     fun getByChunk(chunkPosition: ChunkPosition): Collection<RebarBlock> {
         require(chunkPosition.isLoaded) { "You can only get Rebar blocks in loaded chunks" }
-        return lockBlockRead { blocksByChunk[chunkPosition].orEmpty() }
+        return lockBlockRead { blocksByChunk[chunkPosition].orEmpty().toSet() }
     }
 
     /**
-     * Returns all the Plyon blocks with type [key].
+     * Returns all the Rebar blocks with schema [schema]
+     */
+    @JvmStatic
+    fun getBySchema(schema: RebarBlockSchema): Collection<RebarBlock> = lockBlockRead {
+        blocksBySchema[schema].orEmpty().toSet()
+    }
+
+    /**
+     * Returns all the Rebar blocks whose [Class] inherits [type]
+     */
+    @JvmStatic
+    fun <T> getByType(type: Class<T>): Collection<RebarBlock> = lockBlockRead {
+        blocksBySchema.filter { it.key.isType(type) }.values.flatten()
+    }
+
+    /**
+     * Returns all the Rebar blocks with key [key].
      */
     @JvmStatic
     fun getByKey(key: NamespacedKey): Collection<RebarBlock> =
-        if (RebarRegistry.BLOCKS.contains(key)) {
-            lockBlockRead {
-                blocksByKey[key].orEmpty()
-            }
-        } else {
-            emptySet()
-        }
+        getBySchema(RebarRegistry.BLOCKS.getOrThrow(key))
 
     /**
      * Returns whether the block at [blockPosition] is a Rebar block.
@@ -211,7 +223,7 @@ object BlockStorage : Listener {
      */
     @JvmStatic
     fun isRebarBlock(blockPosition: BlockPosition): Boolean =
-        (blockPosition.chunk.isLoaded) && get(blockPosition) != null
+        (blockPosition.isChunkLoaded) && get(blockPosition) != null
 
     /**
      * Returns whether the block at [block] is a Rebar block.
@@ -219,7 +231,7 @@ object BlockStorage : Listener {
      */
     @JvmStatic
     fun isRebarBlock(block: Block): Boolean =
-        (block.position.chunk.isLoaded) && get(block) != null
+        (block.isChunkLoaded) && get(block) != null
 
     /**
      * Returns whether the block at [location] is a Rebar block
@@ -227,7 +239,7 @@ object BlockStorage : Listener {
      */
     @JvmStatic
     fun isRebarBlock(location: Location): Boolean =
-        (location.chunk.isLoaded) && get(location) != null
+        (location.isChunkLoaded) && get(location) != null
 
 
     /**
@@ -244,7 +256,7 @@ object BlockStorage : Listener {
     fun placeBlock(
         block: Block,
         key: NamespacedKey,
-        context: BlockCreateContext = BlockCreateContext.Default(block)
+        context: BlockCreateContext = BlockCreateContext.Default(block = block)
     ) = placeBlock(block.position, key, context)
 
     /**
@@ -261,7 +273,7 @@ object BlockStorage : Listener {
     fun placeBlock(
         location: Location,
         key: NamespacedKey,
-        context: BlockCreateContext = BlockCreateContext.Default(location.block)
+        context: BlockCreateContext = BlockCreateContext.Default(block = location.block)
     ) = placeBlock(BlockPosition(location), key, context)
 
     /**
@@ -278,9 +290,9 @@ object BlockStorage : Listener {
     fun placeBlock(
         blockPosition: BlockPosition,
         key: NamespacedKey,
-        context: BlockCreateContext = BlockCreateContext.Default(blockPosition.block)
+        context: BlockCreateContext = BlockCreateContext.Default(block = blockPosition.block)
     ): RebarBlock? {
-        require(blockPosition.chunk.isLoaded) { "You can only place Rebar blocks in loaded chunks" }
+        require(blockPosition.isChunkLoaded) { "You can only place Rebar blocks in loaded chunks" }
         require(!isRebarBlock(blockPosition)) { "You cannot place a new Rebar block in place of an existing Rebar blocks" }
 
         val schema = RebarRegistry.BLOCKS[key]
@@ -296,9 +308,10 @@ object BlockStorage : Listener {
         blockPosition: BlockPosition,
         schema: RebarBlockSchema,
         context: BlockCreateContext
-    ) : RebarBlock {
+    ) : RebarBlock? {
         if (context.shouldSetType) {
             blockPosition.block.type = schema.material
+            if (blockPosition.block.type != schema.material) return null
         }
 
         @Suppress("UNCHECKED_CAST") // The cast will work - this is checked in the schema constructor
@@ -307,7 +320,7 @@ object BlockStorage : Listener {
         lockBlockWrite {
             check(blockPosition.chunk in blocksByChunk) { "Chunk '${blockPosition.chunk}' must be loaded" }
             blocks[blockPosition] = block
-            blocksByKey.getOrPut(schema.key, ::mutableListOf).add(block)
+            blocksBySchema.getOrPut(schema, ::mutableListOf).add(block)
             blocksByChunk[blockPosition.chunk]!!.add(block)
         }
 
@@ -332,13 +345,11 @@ object BlockStorage : Listener {
         schema: RebarBlockSchema,
         pdcData: PersistentDataContainer
     ): RebarBlock? {
-        val context = BlockCreateContext.ManualLoading(blockPosition.block)
+        require(blockPosition.isChunkLoaded) { "You can only place Rebar blocks in loaded chunks" }
+        require(!isRebarBlock(blockPosition)) { "You cannot place a new Rebar block in place of an existing Rebar blocks" }
+
         val block = blockPosition.block
-        pdcData.set(RebarBlock.rebarBlockPositionKey, PersistentDataType.LONG, blockPosition.asLong)
-
-        require(block.chunk.isLoaded) { "You can only place Rebar blocks in loaded chunks" }
-        require(!isRebarBlock(block)) { "You cannot place a new Rebar block in place of an existing Rebar blocks" }
-
+        val context = BlockCreateContext.ManualLoading(block = block)
         if (!PreRebarBlockPlaceEvent(block, schema, context).callEvent()) return null
         if (context.shouldSetType) {
             block.type = schema.material
@@ -349,7 +360,7 @@ object BlockStorage : Listener {
         lockBlockWrite {
             check(blockPosition.chunk in blocksByChunk) { "Chunk '${blockPosition.chunk}' must be loaded" }
             blocks[blockPosition] = pyBlock
-            blocksByKey.getOrPut(schema.key, ::mutableListOf).add(pyBlock)
+            blocksBySchema.getOrPut(schema, ::mutableListOf).add(pyBlock)
             blocksByChunk[blockPosition.chunk]!!.add(pyBlock)
         }
 
@@ -364,7 +375,7 @@ object BlockStorage : Listener {
      * Does nothing if the block is not a Rebar block.
      * Only call on the main thread.
      *
-     * @return The items that were dropped by the block being broken
+     * @return The items that were dropped by the block being broken or null if the block was not broken.
      *
      * @throws IllegalArgumentException if the chunk of the given [blockPosition] is not
      * loaded.
@@ -375,7 +386,7 @@ object BlockStorage : Listener {
         blockPosition: BlockPosition,
         context: BlockBreakContext = BlockBreakContext.PluginBreak(blockPosition.block)
     ): List<Item>? {
-        require(blockPosition.chunk.isLoaded) { "You can only break Rebar blocks in loaded chunks" }
+        require(blockPosition.isChunkLoaded) { "You can only break Rebar blocks in loaded chunks" }
         val block = get(blockPosition) ?: return null
         if (!preBreakBlock(block, context)) return null
         return removeBlock(block, blockPosition, context)
@@ -386,7 +397,7 @@ object BlockStorage : Listener {
         block: RebarBlock,
         context: BlockBreakContext
     ) : Boolean {
-        if (block is RebarBreakHandler && !block.preBreak(context)) {
+        if (block is BlockBreakRebarBlockHandler && !block.onPreBlockBreak(context)) {
             return false
         }
         return PreRebarBlockBreakEvent(block.block, block, context).callEvent()
@@ -402,21 +413,21 @@ object BlockStorage : Listener {
         if (context.normallyDrops) {
             block.getDropItem(context)?.let { drops.add(it.clone()) }
         }
-        if (block is RebarBreakHandler) {
-            block.onBreak(drops, context)
+        if (block is BlockBreakRebarBlockHandler) {
+            block.onBlockBreak(drops, context)
         }
 
         lockBlockWrite {
             blocks.remove(blockPosition)
-            blocksByKey[block.schema.key]?.remove(block)
+            blocksBySchema[block.schema]?.remove(block)
             blocksByChunk[blockPosition.chunk]?.remove(block)
         }
 
         if (context.shouldSetToAir) {
             blockPosition.block.type = Material.AIR
         }
-        if (block is RebarBreakHandler) {
-            block.postBreak(context)
+        if (block is BlockBreakRebarBlockHandler) {
+            block.onPostBlockBreak(context)
         }
 
         BlockCullingEngine.remove(block)
@@ -436,7 +447,7 @@ object BlockStorage : Listener {
      * Does nothing if the block is not a Rebar block.
      * Only call on the main thread.
      *
-     * @return The items that were dropped by the block being broken
+     * @return The items that were dropped by the block being broken or null if the block was not broken.
      *
      * @throws IllegalArgumentException if the chunk of the given [block] is not
      * loaded.
@@ -451,7 +462,7 @@ object BlockStorage : Listener {
      * Does nothing if the block is not a Rebar block.
      * Only call on the main thread.
      *
-     * @return The items that were dropped by the block being broken
+     * @return The items that were dropped by the block being broken or null if the block was not broken.
      *
      * @throws IllegalArgumentException if the chunk of the given [block] is not
      * loaded.
@@ -466,7 +477,7 @@ object BlockStorage : Listener {
      * Does nothing if the block is not a Rebar block.
      * Only call on the main thread.
      *
-     * @return The items that were dropped by the block being broken
+     * @return The items that were dropped by the block being broken or null if the block was not broken.
      *
      * @throws IllegalArgumentException if the chunk of the given [location] is not
      * loaded.
@@ -485,24 +496,24 @@ object BlockStorage : Listener {
      */
     @JvmSynthetic
     internal fun deleteBlock(blockPosition: BlockPosition) {
-        require(blockPosition.chunk.isLoaded) { "You can only delete Rebar block data in loaded chunks" }
+        require(blockPosition.isChunkLoaded) { "You can only delete Rebar block data in loaded chunks" }
 
         val block = get(blockPosition) ?: return
 
         val context = BlockBreakContext.Delete(block.block)
-        if (block is RebarBreakHandler) {
-            block.onBreak(mutableListOf(), context)
+        if (block is BlockBreakRebarBlockHandler) {
+            block.onBlockBreak(mutableListOf(), context)
         }
 
         lockBlockWrite {
             blocks.remove(blockPosition)
-            blocksByKey[block.schema.key]?.remove(block)
+            blocksBySchema[block.schema]?.remove(block)
             blocksByChunk[blockPosition.chunk]?.remove(block)
         }
 
         block.block.type = Material.AIR
-        if (block is RebarBreakHandler) {
-            block.postBreak(context)
+        if (block is BlockBreakRebarBlockHandler) {
+            block.onPostBlockBreak(context)
         }
 
         BlockCullingEngine.remove(block)
@@ -510,8 +521,7 @@ object BlockStorage : Listener {
     }
 
     private fun load(world: World, chunk: Chunk): List<RebarBlock> {
-        val type = RebarSerializers.LIST.listTypeFrom(RebarSerializers.TAG_CONTAINER)
-        val chunkBlocks = chunk.persistentDataContainer.get(rebarBlocksKey, type)?.mapNotNull { element ->
+        val chunkBlocks = chunk.persistentDataContainer.get(rebarBlocksKey, rebarBlocksType)?.mapNotNull { element ->
             RebarBlock.deserialize(world, element)
         }?.toMutableList() ?: mutableListOf()
 
@@ -522,9 +532,7 @@ object BlockStorage : Listener {
         val serializedBlocks = chunkBlocks.mapNotNull {
             RebarBlock.serialize(it, chunk.persistentDataContainer.adapterContext)
         }
-
-        val type = RebarSerializers.LIST.listTypeFrom(RebarSerializers.TAG_CONTAINER)
-        chunk.persistentDataContainer.set(rebarBlocksKey, type, serializedBlocks)
+        chunk.persistentDataContainer.set(rebarBlocksKey, rebarBlocksType, serializedBlocks)
     }
 
     @EventHandler
@@ -535,7 +543,7 @@ object BlockStorage : Listener {
             blocksByChunk[event.chunk.position] = chunkBlocks.toMutableList()
             for (block in chunkBlocks) {
                 blocks[block.block.position] = block
-                blocksByKey.computeIfAbsent(block.schema.key) { mutableListOf() }.add(block)
+                blocksBySchema.computeIfAbsent(block.schema) { mutableListOf() }.add(block)
             }
 
             // autosaving
@@ -570,7 +578,7 @@ object BlockStorage : Listener {
                 ?: error("Attempted to save Rebar data for chunk '${event.chunk.position}' but no data is stored")
             for (block in chunkBlocks) {
                 blocks.remove(block.block.position)
-                (blocksByKey[block.schema.key] ?: continue).remove(block)
+                (blocksBySchema[block.schema] ?: continue).remove(block)
             }
             chunkAutosaveTasks.remove(event.chunk.position)?.cancel()
             chunkBlocks
@@ -599,7 +607,7 @@ object BlockStorage : Listener {
             } else if (block.schema.key.isFromAddon(addon)) {
                 RebarBlockSchema.schemaCache[block.block.position] = PhantomBlock.schema
                 RebarBlock.serialize(block, block.block.chunk.persistentDataContainer.adapterContext)?.let { pdc ->
-                    PhantomBlock(pdc, block.schema.key, block.block)
+                    PhantomBlock(pdc, block.schema.key, block.block, true)
                 }
             } else {
                 null
@@ -611,10 +619,10 @@ object BlockStorage : Listener {
             try {
                 phantomise(block)?.let { phantomBlock ->
                     blocks[position] = phantomBlock
-                    blocksByKey[block.key]!!.remove(block)
-                    blocksByKey.computeIfAbsent(phantomBlock.key) { mutableListOf() }.add(phantomBlock)
+                    blocksBySchema[block.schema]!!.remove(block)
+                    blocksBySchema.computeIfAbsent(phantomBlock.schema) { mutableListOf() }.add(phantomBlock)
                     blocksByChunk[position.chunk]!!.remove(block)
-                    blocksByChunk[phantomBlock.block.position.chunk]!!.add(phantomBlock)
+                    blocksByChunk[phantomBlock.block.chunkPosition]!!.add(phantomBlock)
                 }
             } catch (e: Exception) {
                 Rebar.logger.severe("Error while cleaning up block at $position from ${addon.key}")
@@ -628,16 +636,19 @@ object BlockStorage : Listener {
      */
     @JvmSynthetic
     internal fun makePhantom(block: RebarBlock): Unit = lockBlockWrite {
+        val blockPos = block.block.position
         BlockCullingEngine.remove(block)
-        RebarBlockSchema.schemaCache[block.block.position] = PhantomBlock.schema
+        RebarBlockSchema.schemaCache[blockPos] = PhantomBlock.schema
         val pdc = RebarBlock.serialize(block, block.block.chunk.persistentDataContainer.adapterContext) ?: return
         val phantomBlock = PhantomBlock(pdc, block.schema.key, block.block)
 
-        blocks.replace(block.block.position, block, phantomBlock)
-        blocksByKey[block.key]!!.remove(block)
-        blocksByKey.computeIfAbsent(phantomBlock.key) { mutableListOf() }.add(phantomBlock)
-        blocksByChunk[block.block.chunk.position]!!.remove(block)
-        blocksByChunk[phantomBlock.block.chunk.position]!!.add(phantomBlock)
+        blocks.replace(blockPos, block, phantomBlock)
+        blocksBySchema[block.schema]!!.remove(block)
+        blocksBySchema.computeIfAbsent(phantomBlock.schema) { mutableListOf() }.add(phantomBlock)
+        blocksByChunk[blockPos.chunk]!!.remove(block)
+        blocksByChunk[blockPos.chunk]!!.add(phantomBlock)
+
+        RebarBlockPhantomEvent(block.block, block, phantomBlock).callEvent()
     }
 
     @JvmSynthetic

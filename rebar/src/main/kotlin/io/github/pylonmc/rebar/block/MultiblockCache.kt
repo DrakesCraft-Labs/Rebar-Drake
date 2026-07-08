@@ -1,10 +1,11 @@
 package io.github.pylonmc.rebar.block
 
 import com.destroystokyo.paper.event.block.BlockDestroyEvent
-import io.github.pylonmc.rebar.block.base.RebarMultiblock
+import io.github.pylonmc.rebar.block.interfaces.RebarMultiblock
 import io.github.pylonmc.rebar.event.*
 import io.github.pylonmc.rebar.util.position.BlockPosition
 import io.github.pylonmc.rebar.util.position.ChunkPosition
+import io.github.pylonmc.rebar.util.position.chunkPosition
 import io.github.pylonmc.rebar.util.position.position
 import org.bukkit.block.Block
 import org.bukkit.block.BlockState
@@ -113,7 +114,9 @@ internal object MultiblockCache : Listener {
     }
 
     private fun onMultiblockAdded(multiblock: RebarMultiblock) {
-        for (chunk in multiblock.chunksOccupied) {
+        val chunks = multiblock.chunksOccupied
+        check(!chunks.isEmpty()) { "Your multiblock must occupy at least one chunk" }
+        for (chunk in chunks) {
             multiblocksWithComponentsInChunk.getOrPut(chunk) { mutableSetOf() }.add(multiblock.block.position)
         }
 
@@ -141,7 +144,7 @@ internal object MultiblockCache : Listener {
         }
 
     private fun loadedMultiblocksWithComponent(block: Block): List<BlockPosition>
-            = loadedMultiblocksWithComponentsInChunk(block.position.chunk).filter {
+            = loadedMultiblocksWithComponentsInChunk(block.chunkPosition).filter {
         BlockStorage.getAs<RebarMultiblock>(it)?.isPartOfMultiblock(block) == true
     }
 

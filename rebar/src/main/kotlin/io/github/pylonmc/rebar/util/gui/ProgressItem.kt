@@ -5,6 +5,7 @@ import io.github.pylonmc.rebar.item.builder.ItemStackBuilder
 import io.github.pylonmc.rebar.util.gui.unit.UnitFormat
 import io.papermc.paper.datacomponent.DataComponentTypes
 import io.papermc.paper.datacomponent.item.TooltipDisplay
+import io.papermc.paper.util.Tick
 import net.kyori.adventure.text.Component
 import org.bukkit.Material
 import org.bukkit.entity.Player
@@ -27,7 +28,7 @@ import kotlin.math.min
  *
  * Using any `set` methods on here will automatically update the item in any windows that contain it.
  *
- * @param builder The item stack builder to use for the item
+ * @param item The item to be displayed
  * @param countDown If true, the progress bar will be inverted, meaning that 0.0 is full and 1.0 is empty.
  */
 open class ProgressItem @JvmOverloads constructor(
@@ -54,6 +55,7 @@ open class ProgressItem @JvmOverloads constructor(
 
     fun setItem(item: Item) {
         this.item = item
+        notifyWindows()
     }
 
     fun setItem(stack: ItemStack) {
@@ -107,7 +109,7 @@ open class ProgressItem @JvmOverloads constructor(
      * Sets how far through the [totalTime] we are
      */
     fun setRemainingTimeTicks(ticks: Int) {
-        setRemainingTime(Duration.ofMillis((ticks * 1000.0 / 20.0).toLong()))
+        setRemainingTime(Tick.of(ticks.toLong()))
     }
 
     fun setTotalTimeSeconds(seconds: Int?) {
@@ -115,7 +117,7 @@ open class ProgressItem @JvmOverloads constructor(
     }
 
     fun setTotalTimeTicks(ticks: Int?) {
-        totalTime = ticks?.let { Duration.ofMillis((it * 1000.0 / 20.0).toLong()) }
+        totalTime = ticks?.let { Tick.of(it.toLong()) }
     }
 
     @Suppress("UnstableApiUsage")
