@@ -115,7 +115,7 @@ open class FluidPipe(stack: ItemStack) : RebarItem(stack), InteractRebarItemHand
         if (rebarBlock is FluidIntersectionMarker) {
             if (rebarBlock.pipe == this) {
                 // This pipe matches the pipe we right clicked; start a connection
-                FluidPipePlacementService.startConnection(player, FluidPipePlacementPoint.PointDisplay(rebarBlock.fluidIntersectionDisplay), this)
+                FluidPipePlacementService.startConnection(player, FluidPipePlacementPoint.PointDisplay(rebarBlock.fluidIntersectionDisplay))
             } else {
                 // This pipe does not match the pipe we right clicked
                 player.sendActionBar(Component.translatable("rebar.message.pipe.not_of_same_type"))
@@ -126,7 +126,7 @@ open class FluidPipe(stack: ItemStack) : RebarItem(stack), InteractRebarItemHand
         if (rebarBlock is FluidSectionMarker) {
             if (rebarBlock.pipeDisplay!!.pipe == this) {
                 // This pipe matches the pipe we right clicked; start a connection
-                FluidPipePlacementService.startConnection(player, FluidPipePlacementPoint.Section(rebarBlock), this)
+                FluidPipePlacementService.startConnection(player, FluidPipePlacementPoint.Section(rebarBlock))
             } else {
                 // This pipe does not match the pipe we right clicked
                 player.sendActionBar(Component.translatable("rebar.message.pipe.not_of_same_type"))
@@ -135,7 +135,7 @@ open class FluidPipe(stack: ItemStack) : RebarItem(stack), InteractRebarItemHand
         }
 
         if (block.type.isAir()) {
-            FluidPipePlacementService.startConnection(player, FluidPipePlacementPoint.EmptyBlock(BlockPosition(block)), this)
+            FluidPipePlacementService.startConnection(player, FluidPipePlacementPoint.EmptyBlock(BlockPosition(block)))
             return true
         }
 
@@ -146,7 +146,7 @@ open class FluidPipe(stack: ItemStack) : RebarItem(stack), InteractRebarItemHand
         val hitRebarEntity = EntityStorage.get(entity)
         if (hitRebarEntity is FluidPointDisplay) {
             if (hitRebarEntity.connectedPipeDisplays.isEmpty()) {
-                FluidPipePlacementService.startConnection(player, FluidPipePlacementPoint.PointDisplay(hitRebarEntity), this)
+                FluidPipePlacementService.startConnection(player, FluidPipePlacementPoint.PointDisplay(hitRebarEntity))
                 return true
             }
         }
