@@ -13,10 +13,10 @@ repositories {
 val minecraftVersion = property("minecraft.version").toString()
 
 dependencies {
-    paperweight.paperDevBundle("$minecraftVersion.build.+")
+    paperweight.paperDevBundle("$minecraftVersion-R0.1-SNAPSHOT")
     compileOnly(project(":rebar"))
 }
 
 kotlin {
-    jvmToolchain(25)
+    jvmToolchain(21)
 }

@@ -18,13 +18,13 @@ repositories {
 val minecraftVersion = property("minecraft.version").toString()
 
 dependencies {
-    compileOnly("io.papermc.paper:paper-api:$minecraftVersion.build.+")
+    compileOnly("io.papermc.paper:paper-api:$minecraftVersion-R0.1-SNAPSHOT")
     compileOnly(project(":rebar"))
     implementation("org.assertj:assertj-core:3.27.2")
 }
 
 java {
-    toolchain.languageVersion = JavaLanguageVersion.of(25)
+    toolchain.languageVersion = JavaLanguageVersion.of(21)
 }
 
 bukkit {
