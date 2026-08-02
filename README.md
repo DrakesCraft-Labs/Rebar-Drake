@@ -1,3 +1,9 @@
+> [!NOTE]
+> **Fork de mantenimiento de DrakesCraft-Labs.** Basado en `pylonmc/rebar` para
+> mantener compatibilidad con Paper 1.21.11 y Java 21, requisito de Pylon en
+> DrakesCraft. Conserva créditos y licencia upstream; no implica despliegue
+> automático en producción.
+
 ## What is Rebar?
 Rebar is an upcoming Minecraft Java plugin that allows vanilla gameplay to be expanded with new blocks, items, mechanics, and more. It includes a research system, an in-game guide, fluid pipe system, first-class translation support, multiblocks, support for custom logistics, and much more - all behind an intuitive API. Rebar differentiates itself from Nexo, ItemsAdder, and similar plugins by focusing solely on plugin developers and allowing them to implement significantly more complex mechanics.
 
