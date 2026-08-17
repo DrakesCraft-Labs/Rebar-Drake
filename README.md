@@ -1,32 +1,28 @@
-> [!NOTE]
-> **Fork de mantenimiento de DrakesCraft-Labs.** Basado en `pylonmc/rebar` para
-> mantener compatibilidad con Paper 1.21.11 y Java 21, requisito de Pylon en
-> DrakesCraft. Conserva créditos y licencia upstream; no implica despliegue
-> automático en producción.
+<p align="center">
+  <img src="banner.svg" width="100%" alt="REBAR-DRAKE Animated Banner" />
+</p>
 
-## What is Rebar?
-Rebar is an upcoming Minecraft Java plugin that allows vanilla gameplay to be expanded with new blocks, items, mechanics, and more. It includes a research system, an in-game guide, fluid pipe system, first-class translation support, multiblocks, support for custom logistics, and much more - all behind an intuitive API. Rebar differentiates itself from Nexo, ItemsAdder, and similar plugins by focusing solely on plugin developers and allowing them to implement significantly more complex mechanics.
+# Rebar-Drake
 
-Rebar is the framework behind our Pylon plugin (https://github.com/pylonmc/pylon).
+Fork de mantenimiento y compatibilidad de **Rebar**, un framework moderno para desarrolladores en Minecraft Java que permite registrar **bloques multibloque, árboles de investigación, sistemas de fluidos, guías interactivas y mecánicas logísticas complejas**. Mantenido por **DrakesCraft Labs** para Paper/Purpur 1.21.11 en Java 21.
 
-## Find out more
-Join our Discord: https://discord.gg/4tMAnBAacW  
-Visit our website: https://pylonmc.github.io/
+---
 
-## Warning
-> [!CAUTION]
-> REBAR IS CURRENTLY EXPERIMENTAL. ONLY RUN IT ON A TEST SERVER THAT YOU ARE WILLING TO DELETE. THE NEXT REBAR VERSION WILL PROBABLY NOT BE COMPATIBLE WITH THE PREVIOUS ONE. IF YOU INSTALL REBAR SOMEWHERE YOU SHOULDN'T AND END UP LOSING DATA, WE WILL POINT AND LAUGH AT YOU
+## 🎯 Propósito del Framework
 
-## Rebar in pictures
-<img width="250" alt="using-smeltery" src="https://github.com/user-attachments/assets/b8a7ba3c-9103-46a5-ab43-f31de08dd492" /> 
-<img width="250" alt="using-magic-altar" src="https://github.com/user-attachments/assets/fd1d4ed9-3f1e-491a-ac73-2be9bb172e53" />
-<img width="250" alt="using-grindstone-turner" src="https://github.com/user-attachments/assets/ee947130-ce57-4af0-a5f9-b2eaf0480036" />
-<img width="250" alt="looking-at-copper-fluid-tank" src="https://github.com/user-attachments/assets/6ea14a54-d72a-40a5-881f-763bcf36dcb6" />
-<img width="250" alt="searching-items" src="https://github.com/user-attachments/assets/ae768505-a3bd-4724-ac5f-19a28928f6fd" />
-<img width="250" alt="purification-tower-config" src="https://github.com/user-attachments/assets/aab82ef9-9dbc-4721-b7da-3e5f4f33b94f" />
-<img width="250" alt="placing-pipes" src="https://github.com/user-attachments/assets/510aef60-95a7-4b31-a73b-2193dd233710" />
-<img width="250" alt="medkit" src="https://github.com/user-attachments/assets/36a30525-7939-44af-822a-cc245f93a34e" />
-<img width="250" alt="looking-at-research" src="https://github.com/user-attachments/assets/f10c797b-cf1e-46ab-ba83-4003753b1648" />
-<img width="250" alt="hovering-over-research-pack" src="https://github.com/user-attachments/assets/522f3252-d7af-4306-aeca-0dac43857277" />
-<img width="250" alt="hydraulic-fluid-setup" src="https://github.com/user-attachments/assets/3d73e3c9-dc29-4ccd-a34d-038f5a916e84" />
-<img width="250" alt="fluid-setup" src="https://github.com/user-attachments/assets/5a86a0e1-6321-4fa6-8452-292b033a6158" />
+A diferencia de plugins de cosméticos como Nexo o ItemsAdder, Rebar se enfoca puramente en la lógica de programación para desarrolladores de servidores técnicos:
+
+- **Estructuras Multibloque Declarativas**:
+  - Detección de patrones en el mundo con validación geométrica instantánea.
+- **Redes de Tuberías y Flujo**:
+  - Algoritmos eficientes para transporte de fluidos e inventarios.
+- **Árbol de Investigaciones & Guía**:
+  - Sistema de desbloqueo de conocimientos y recetas con interfaz amigable.
+
+---
+
+## 🛠️ Entorno y Compilación
+
+- **Servidor**: Paper / Purpur 1.21.11
+- **Java**: 21
+- **Construcción**: Gradle Kotlin DSL
