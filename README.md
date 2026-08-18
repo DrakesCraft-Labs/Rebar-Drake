@@ -4,6 +4,16 @@
 
 # Rebar-Drake
 
+> ### 🏰 ¡Únete a la Comunidad Oficial de DrakesCraft!
+> 
+> * 🎮 **IP del Servidor**: `play.drakescraft.net` *(Java 1.21.11 & Bedrock)*
+> * 💬 **Discord Oficial**: [discord.gg/drakescraft](https://discord.gg/rR7FbfCt9Y)
+> * 🌐 **Web & Guía**: [drakescraft.net](https://drakescraft.net) — 🛒 **Tienda**: [tienda.drakescraft.net](https://tienda.drakescraft.net)
+> 
+> *¡Juega con este addon y más de 80 expansiones optimizadas en vivo en nuestra network de supervivencia técnica!*
+
+---
+
 Fork de mantenimiento y compatibilidad de **Rebar**, un framework moderno para desarrolladores en Minecraft Java que permite registrar **bloques multibloque, árboles de investigación, sistemas de fluidos, guías interactivas y mecánicas logísticas complejas**. Mantenido por **DrakesCraft Labs** para Paper/Purpur 1.21.11 en Java 21.
 
 ---
